@@ -94,76 +94,110 @@ const createPost = async (req, res) => {
     }
 };
 
-// GET /api/posts — Get all published posts (with optional search/filter/pagination)
+// Escape user input before using it in a MongoDB regular expression.
+const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const buildPostFilters = async (filters, baseQuery = {}) => {
+    const query = { ...baseQuery };
+    const { search, category, type, tags, dateRange, sort } = filters;
+
+    if (search && typeof search === "string" && search.trim()) {
+        const term = new RegExp(escapeRegex(search.trim().slice(0, 100)), "i");
+        const User = mongoose.model("User");
+        const Category = mongoose.model("Category");
+        const [authors, categories] = await Promise.all([
+            User.find({ username: term }).select("_id").lean(),
+            Category.find({ name: term }).select("_id").lean()
+        ]);
+        const searchConditions = [
+            { title: term }, { content: term }, { excerpt: term }, { tags: term }
+        ];
+        if (authors.length) searchConditions.push({ author: { $in: authors.map(user => user._id) } });
+        if (categories.length) searchConditions.push({ category: { $in: categories.map(item => item._id) } });
+        query.$and = [...(query.$and || []), { $or: searchConditions }];
+    }
+
+    if (category) {
+        if (isValidId(category)) {
+            query.category = category;
+        } else {
+            const Category = mongoose.model("Category");
+            const found = await Category.findOne({ slug: category }).select("_id").lean();
+            query.category = found?._id || null;
+        }
+    }
+
+    if (type && ["blog", "video"].includes(type)) query.type = type;
+
+    if (tags) {
+        const tagList = (Array.isArray(tags) ? tags : String(tags).split(","))
+            .map(tag => tag.trim()).filter(Boolean).slice(0, 10);
+        if (tagList.length) query.tags = { $in: tagList.map(tag => new RegExp(escapeRegex(tag), "i")) };
+    }
+
+    const now = new Date();
+    let fromDate = null;
+    if (dateRange === "7days") fromDate = new Date(now.getTime() - 7 * 86400000);
+    if (dateRange === "30days") fromDate = new Date(now.getTime() - 30 * 86400000);
+    if (dateRange === "3months" || dateRange === "6months") {
+        fromDate = new Date(now);
+        fromDate.setMonth(fromDate.getMonth() - (dateRange === "3months" ? 3 : 6));
+    }
+    if (dateRange === "thisYear") fromDate = new Date(now.getFullYear(), 0, 1);
+    if (fromDate) query.createdAt = { $gte: fromDate, $lte: now };
+
+    const sortOptions = {
+        latest: { createdAt: -1 },
+        oldest: { createdAt: 1 },
+        mostViewed: { views: -1, createdAt: -1 }
+    };
+    return { query, sort: sortOptions[sort] || sortOptions.latest };
+};
+
+// GET /api/posts — Get published posts with combined search and filters
 const getPosts = async (req, res) => {
     try {
-        const {
-            page = 1,
-            limit = 10,
-            search,
-            category,
-            type,
-            status
-        } = req.query;
+        const pageNum = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limitNum = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+        const status = req.user?.role === "admin" && ["draft", "published"].includes(req.query.status)
+            ? req.query.status : "published";
 
-        const query = {};
-
-        // Public gets only published posts; admin can filter by status
-        if (req.user && req.user.role === "admin" && status) {
-            query.status = status;
-        } else {
-            query.status = "published";
-        }
-
-        if (search) {
-            query.$or = [
-                { title: { $regex: search, $options: "i" } },
-                { content: { $regex: search, $options: "i" } },
-                { excerpt: { $regex: search, $options: "i" } }
-            ];
-        }
-
-        if (category && isValidId(category)) {
-            query.category = category;
-        }
-
-        if (type && ["blog", "video"].includes(type)) {
-            query.type = type;
-        }
-
-        const pageNum = Math.max(1, parseInt(page));
-        const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+        const { query, sort } = await buildPostFilters(req.query, { status });
         const skip = (pageNum - 1) * limitNum;
+        const total = await Post.countDocuments(query);
+        let posts;
 
-        const [posts, total] = await Promise.all([
-            Post.find(query)
-                .populate("author", "username profileImage")
-                .populate("category", "name slug")
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limitNum),
-            Post.countDocuments(query)
-        ]);
+        if (req.query.sort === "mostLiked") {
+            const [ranked, matchingPosts] = await Promise.all([
+                Like.aggregate([
+                    { $group: { _id: "$post", likesCount: { $sum: 1 } } },
+                    { $sort: { likesCount: -1 } }
+                ]),
+                Post.find(query).populate("author", "username profileImage")
+                    .populate("category", "name slug").lean()
+            ]);
+            const rank = new Map(ranked.map((item, index) => [item._id.toString(), index]));
+            matchingPosts.sort((a, b) =>
+                (rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER) -
+                (rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER)
+            );
+            posts = matchingPosts.slice(skip, skip + limitNum);
+        } else {
+            posts = await Post.find(query).populate("author", "username profileImage")
+                .populate("category", "name slug").sort(sort).skip(skip).limit(limitNum);
+        }
 
         return res.status(200).json({
             success: true,
             message: "Posts fetched successfully",
             data: {
                 posts,
-                pagination: {
-                    total,
-                    page: pageNum,
-                    limit: limitNum,
-                    totalPages: Math.ceil(total / limitNum)
-                }
+                pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) }
             }
         });
     } catch (e) {
         console.error("getPosts error:", e);
-        return res.status(500).json({
-            success: false,
-            message: "Something went wrong"
-        });
+        return res.status(500).json({ success: false, message: "Something went wrong" });
     }
 };
 
