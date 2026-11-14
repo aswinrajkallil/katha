@@ -64,8 +64,8 @@ export default function Profile() {
                 {profile.bio && <p style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{profile.bio}</p>}
                 <div style={{ display: "flex", gap: 18, flexWrap: "wrap", color: "#555" }}>
                     <span><strong>{profile.stats?.posts ?? 0}</strong> posts</span>
-                    <Link to={`/profile/${id}/followers`}><strong>{profile.stats?.followers ?? 0}</strong> followers</Link>
-                    <Link to={`/profile/${id}/following`}><strong>{profile.stats?.following ?? 0}</strong> following</Link>
+                    <Link to={`/profile/${profile._id}/followers`}><strong>{profile.stats?.followers ?? 0}</strong> followers</Link>
+                    <Link to={`/profile/${profile._id}/following`}><strong>{profile.stats?.following ?? 0}</strong> following</Link>
                     {profile.location && <span>{profile.location}</span>}
                     {profile.website && <a href={profile.website} target="_blank" rel="noreferrer">Website</a>}
                 </div>
