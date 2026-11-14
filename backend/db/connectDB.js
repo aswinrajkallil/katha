@@ -1,16 +1,17 @@
 import mongoose from "mongoose";
 
+const connectDB = async () => {
+    if (!process.env.MONGO_URI) {
+        throw new Error("MONGO_URI is not configured in the environment");
+    }
 
-const connectDB = async () =>{
-    try{
+    try {
         await mongoose.connect(process.env.MONGO_URI);
         console.log("Mongo DB Connected Successfully !!");
-        
-    }catch(e){
-        console.log("Failed to connect Mongo DB 🛑🛑   ,   " +e);
-        
-        
+    } catch (error) {
+        console.error("Failed to connect MongoDB:", error.message);
+        throw error;
     }
-}
+};
 
-export default connectDB
+export default connectDB;
