@@ -1,86 +1,55 @@
 import Like from "../models/Like.js";
 import Post from "../models/Post.js";
+import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
 
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+const isValidId = id => mongoose.Types.ObjectId.isValid(id);
 
-// POST /api/posts/:postId/like
 const likePost = async (req, res) => {
     try {
         const { postId } = req.params;
-
-        if (!isValidId(postId)) {
-            return res.status(400).json({ success: false, message: "Invalid post ID" });
+        if (!isValidId(postId)) return res.status(400).json({ success: false, message: "Invalid post ID" });
+        const post = await Post.findById(postId).select("author status");
+        if (!post || post.status !== "published") return res.status(404).json({ success: false, message: "Post not found" });
+        try { await Like.create({ user: req.user.id, post: postId }); }
+        catch (error) {
+            if (error.code === 11000) return res.status(409).json({ success: false, message: "Already liked" });
+            throw error;
         }
-
-        const post = await Post.findById(postId);
-        if (!post || post.status !== "published") {
-            return res.status(404).json({ success: false, message: "Post not found" });
+        if (post.author.toString() !== req.user.id) {
+            await Notification.create({ recipient: post.author, sender: req.user.id, type: "LIKE", post: postId });
         }
-
-        try {
-            await Like.create({ user: req.user.id, post: postId });
-        } catch (e) {
-            if (e.code === 11000) {
-                return res.status(400).json({ success: false, message: "Already liked" });
-            }
-            throw e;
-        }
-
-        const count = await Like.countDocuments({ post: postId });
-        return res.status(201).json({ success: true, message: "Post liked", data: { likes: count } });
-    } catch (e) {
-        return res.status(500).json({ success: false, message: "Something went wrong" });
+        const likes = await Like.countDocuments({ post: postId });
+        return res.status(201).json({ success: true, message: "Post liked", data: { likes } });
+    } catch (error) {
+        console.error("likePost:", error);
+        return res.status(500).json({ success: false, message: "Unable to like post" });
     }
 };
 
-// DELETE /api/posts/:postId/like
 const unlikePost = async (req, res) => {
     try {
         const { postId } = req.params;
-
-        if (!isValidId(postId)) {
-            return res.status(400).json({ success: false, message: "Invalid post ID" });
-        }
-
-        const like = await Like.findOneAndDelete({ user: req.user.id, post: postId });
-
-        if (!like) {
-            return res.status(404).json({ success: false, message: "You haven't liked this post" });
-        }
-
-        const count = await Like.countDocuments({ post: postId });
-        return res.status(200).json({ success: true, message: "Post unliked", data: { likes: count } });
-    } catch (e) {
-        return res.status(500).json({ success: false, message: "Something went wrong" });
+        if (!isValidId(postId)) return res.status(400).json({ success: false, message: "Invalid post ID" });
+        const deleted = await Like.findOneAndDelete({ user: req.user.id, post: postId });
+        if (!deleted) return res.status(404).json({ success: false, message: "You haven't liked this post" });
+        const likes = await Like.countDocuments({ post: postId });
+        return res.json({ success: true, message: "Post unliked", data: { likes } });
+    } catch (error) {
+        console.error("unlikePost:", error);
+        return res.status(500).json({ success: false, message: "Unable to unlike post" });
     }
 };
 
-// GET /api/posts/:postId/likes
 const getLikes = async (req, res) => {
     try {
         const { postId } = req.params;
-
-        if (!isValidId(postId)) {
-            return res.status(400).json({ success: false, message: "Invalid post ID" });
-        }
-
+        if (!isValidId(postId)) return res.status(400).json({ success: false, message: "Invalid post ID" });
         const count = await Like.countDocuments({ post: postId });
-
-        // If user is authenticated, check if they liked this post
-        let userLiked = false;
-        if (req.user) {
-            const like = await Like.findOne({ user: req.user.id, post: postId });
-            userLiked = !!like;
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "Likes fetched",
-            data: { likes: count, userLiked }
-        });
-    } catch (e) {
-        return res.status(500).json({ success: false, message: "Something went wrong" });
+        const userLiked = req.user ? Boolean(await Like.exists({ user: req.user.id, post: postId })) : false;
+        return res.json({ success: true, message: "Likes fetched", data: { likes: count, userLiked } });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: "Unable to fetch likes" });
     }
 };
 
