@@ -28,7 +28,7 @@ const createComment = async (req, res) => {
             ? (await Comment.findById(parentComment).select("author")).author
             : post.author;
         if (recipient && recipient.toString() !== req.user.id) {
-            await Notification.create({ recipient, sender: req.user.id, type: "COMMENT", post: postId, comment: comment._id });
+            await Notification.create({ recipient, sender: req.user.id, type: "COMMENT", post: postId, comment: comment._id }).catch(error => console.error("Comment notification failed:", error));
         }
         return res.status(201).json({ success: true, message: "Comment added", data: comment });
     } catch (error) {
