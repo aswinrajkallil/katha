@@ -66,7 +66,6 @@ const updateProfile = async (req, res) => {
             return res.status(400).json({ success: false, message: "Website must start with http:// or https://" });
         }
 
-        if (req.body.isPrivate !== undefined) user.isPrivate = req.body.isPrivate === "true" || req.body.isPrivate === true;
         if (req.file) user.profileImage = `/uploads/${req.file.filename}`;
 
         await user.save();
