@@ -18,7 +18,6 @@ const userSchema = new mongoose.Schema({
     location: { type: String, trim: true, maxlength: 100, default: "" },
     website: { type: String, trim: true, maxlength: 200, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
-    isPrivate: { type: Boolean, default: false },
     refreshToken: { type: String, default: null }
 }, { timestamps: true });
 
