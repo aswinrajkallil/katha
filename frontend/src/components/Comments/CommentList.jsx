@@ -39,7 +39,7 @@ const CommentItem = ({ comment, postId, onCommentAdded, onCommentDeleted }) => {
             </div>
             <p style={{ margin: "0 0 8px", lineHeight: 1.6 }}>{comment.content}</p>
             <div style={{ display: "flex", gap: 12, fontSize: 13 }}>
-                {user && (
+                {user && !comment.parentComment && (
                     <button
                         onClick={() => setShowReplyForm((v) => !v)}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#555" }}
