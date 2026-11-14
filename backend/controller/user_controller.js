@@ -82,6 +82,19 @@ const updateProfile = async (req, res) => {
     }
 };
 
+const updateCoverImage = async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ success: false, message: "Cover image is required" });
+        const user = await User.findByIdAndUpdate(req.user.id, { coverImage: `/uploads/${req.file.filename}` }, { new: true })
+            .select("-password -refreshToken");
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        return res.json({ success: true, message: "Cover image updated", data: user });
+    } catch (error) {
+        console.error("updateCoverImage:", error);
+        return res.status(500).json({ success: false, message: "Unable to update cover image" });
+    }
+};
+
 const getUserPosts = async (req, res) => {
     try {
         const key = req.params.id;
@@ -102,4 +115,4 @@ const getUserPosts = async (req, res) => {
     }
 };
 
-export { getUserProfile, getMyProfile, updateProfile, getUserPosts };
+export { getUserProfile, getMyProfile, updateProfile, updateCoverImage, getUserPosts };
