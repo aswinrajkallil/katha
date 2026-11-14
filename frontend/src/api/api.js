@@ -1,10 +1,43 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
+let refreshPromise = null;
+
+const refreshAccessToken = async () => {
+    if (!refreshPromise) {
+        refreshPromise = fetch(`${API_URL}/api/refresh`, {
+            method: "POST",
+            credentials: "include"
+        })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error("SESSION_EXPIRED");
+                }
+
+                const data = await response.json();
+                const token = data.data?.accessToken || data.accessToken;
+
+                if (!token) {
+                    throw new Error("SESSION_EXPIRED");
+                }
+
+                localStorage.setItem("accessToken", token);
+                return token;
+            })
+            .catch((error) => {
+                localStorage.removeItem("accessToken");
+                throw error;
+            })
+            .finally(() => {
+                refreshPromise = null;
+            });
+    }
+
+    return refreshPromise;
+};
+
 /**
- * Shared API client for Kathā.
- * - Automatically attaches Authorization header with access token
- * - Retries once after refreshing the token on 401
- * - Throws on session expiry so components can redirect to login
+ * Shared API client.
+ * Attaches the access token and retries one time after a coordinated refresh.
  */
 const apiFetch = async (path, options = {}) => {
     const sendRequest = (token) => {
@@ -14,53 +47,31 @@ const apiFetch = async (path, options = {}) => {
             headers.set("Authorization", `Bearer ${token}`);
         }
 
-        // Don't set Content-Type for FormData — browser sets it with boundary
-        if (!(options.body instanceof FormData) && !headers.has("Content-Type") && options.body) {
+        if (
+            !(options.body instanceof FormData) &&
+            !headers.has("Content-Type") &&
+            options.body
+        ) {
             headers.set("Content-Type", "application/json");
         }
 
         return fetch(`${API_URL}/api${path}`, {
             ...options,
-            credentials: "include", // Always send cookies for refresh token
+            credentials: "include",
             headers
         });
     };
 
-    let accessToken = localStorage.getItem("accessToken");
+    const isAuthEndpoint = ["/login", "/register", "/refresh", "/logout"].includes(path);
+    const accessToken = localStorage.getItem("accessToken");
     let response = await sendRequest(accessToken);
 
-    // Authentication endpoints must return their own 401 responses.
-    // Do not try refreshing a session when login/register credentials are rejected.
-    const isAuthEndpoint = ["/login", "/register", "/refresh", "/logout"].includes(path);
-
-    // Only refresh protected API requests, never login/register requests.
     if (response.status !== 401 || isAuthEndpoint) {
         return response;
     }
 
-    // Try refreshing the access token
-    const refreshResponse = await fetch(`${API_URL}/api/refresh`, {
-        method: "POST",
-        credentials: "include"
-    });
-
-    if (!refreshResponse.ok) {
-        localStorage.removeItem("accessToken");
-        throw new Error("SESSION_EXPIRED");
-    }
-
-    const data = await refreshResponse.json();
-    accessToken = data.data?.accessToken || data.accessToken;
-
-    if (!accessToken) {
-        localStorage.removeItem("accessToken");
-        throw new Error("SESSION_EXPIRED");
-    }
-
-    localStorage.setItem("accessToken", accessToken);
-
-    // Retry the original request with the new token
-    response = await sendRequest(accessToken);
+    const newAccessToken = await refreshAccessToken();
+    response = await sendRequest(newAccessToken);
     return response;
 };
 
