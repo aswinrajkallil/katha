@@ -18,7 +18,7 @@ const followUser = async (req, res) => {
             if (error.code === 11000) return res.status(409).json({ success: false, message: "Already following this user" });
             throw error;
         }
-        await Notification.create({ recipient: userId, sender: req.user.id, type: "FOLLOW" });
+        await Notification.create({ recipient: userId, sender: req.user.id, type: "FOLLOW" }).catch(error => console.error("Follow notification failed:", error));
         const followers = await Follow.countDocuments({ following: userId });
         return res.status(201).json({ success: true, message: `You are now following ${target.username}`, data: { followers } });
     } catch (error) {
