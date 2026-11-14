@@ -1,40 +1,56 @@
-import jwt from 'jsonwebtoken'
+import jwt from "jsonwebtoken";
 
-const middleware = (req, res, next)=>{
-    try{
-
+const authenticate = (req, res, next) => {
+    try {
         const authHeader = req.headers.authorization;
 
-        console.log("AUTH HEADER:", authHeader);
-
-        if (!authHeader) {
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
             return res.status(401).json({
-
-            })
-    }
+                success: false,
+                message: "Authorization token required"
+            });
+        }
 
         const token = authHeader.split(" ")[1];
 
-        console.log(token);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        const decoded = jwt.verify( token,process.env.JWT_SECRET );
-
-        console.log(decoded);
-
-        console.log(req.headers);
-        
-        console.log("middleware is running !!!!!!!");
-
+        // Attach decoded user payload to request
         req.user = decoded;
-        next()
-    }catch(e){
-        console.log(e);
 
-    return res.status(401).json({
+        next();
+    } catch (e) {
+        return res.status(401).json({
             success: false,
-            message: "Authorization token required"
+            message: "Invalid or expired token"
         });
     }
- }  
+};
 
- export default  middleware 
+// Optional auth: attaches user if token is present, but doesn't block if missing
+const optionalAuth = (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+            const token = authHeader.split(" ")[1];
+            req.user = jwt.verify(token, process.env.JWT_SECRET);
+        }
+    } catch (_) {
+        // Token invalid — treat as unauthenticated, don't block
+    }
+    next();
+};
+
+// Middleware to restrict access to admins only
+const requireAdmin = (req, res, next) => {
+    if (!req.user || req.user.role !== "admin") {
+        return res.status(403).json({
+            success: false,
+            message: "Admin access required"
+        });
+    }
+    next();
+};
+
+export { authenticate, optionalAuth, requireAdmin };
+export default authenticate;

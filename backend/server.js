@@ -1,55 +1,69 @@
 import express from "express";
-import dotenv from "dotenv"
+import dotenv from "dotenv";
 import cors from "cors";
-import connectDB from "./db/connectDB.js";
-import router from "./routes/auth_route.js";
 import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config()
+import connectDB from "./db/connectDB.js";
+import authRouter from "./routes/auth_route.js";
+import postRouter from "./routes/post_route.js";
+import categoryRouter from "./routes/category_route.js";
+import commentRouter from "./routes/comment_route.js";
+import commentStandaloneRouter from "./routes/comment_standalone_route.js";
+import likeRouter from "./routes/like_route.js";
+import bookmarkRouter from "./routes/bookmark_route.js";
+import bookmarkPostRouter from "./routes/bookmark_post_route.js";
+import userRouter from "./routes/user_route.js";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT
+const PORT = process.env.PORT || 5000;
 
-connectDB()
+connectDB();
 
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true
 }));
-app.use(express.json())
 
+app.use(express.json());
 app.use(cookieParser());
 
-app.get('/',(req,res)=>{
-    res.send("Welcome to Home Page !!")
-})
+// Serve uploaded files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Auth routes
+app.use("/api", authRouter);
 
-app.use('/api',router)
+// Post routes
+app.use("/api/posts", postRouter);
 
+// Comment routes (nested under posts) + standalone
+app.use("/api/posts/:postId/comments", commentRouter);
+app.use("/api/comments", commentStandaloneRouter);
 
-// app.post('/api/notes',(req,res)=>{
-//     console.log(req.body);
-//     res.json(req.body);
+// Like routes (nested under posts)
+app.use("/api/posts/:postId", likeRouter);
 
-// })
+// Bookmark routes — nested under posts + standalone
+app.use("/api/posts/:postId", bookmarkPostRouter);
+app.use("/api/bookmarks", bookmarkRouter);
 
-app.get('/notes1',(req,res)=>{
-    const notes = [
-        { text: "Learn React" },
-        { text: "Learn Express" },
-        { text: "Learn MongoDB" }
-    ];
-    res.json(notes)
-})
+// Category routes
+app.use("/api/categories", categoryRouter);
 
+// User routes
+app.use("/api/users", userRouter);
 
+app.get("/", (req, res) => {
+    res.json({ success: true, message: "Kathā API is running" });
+});
 
-
-
-
-
-
-app.listen(PORT,()=>{
-    console.log(`server is running on http://localhost:${PORT}`)
-})
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
