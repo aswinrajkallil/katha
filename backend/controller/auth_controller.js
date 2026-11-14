@@ -5,12 +5,21 @@ import { generateRefreshToken, generateToken } from "../utils/jwt.js";
 
 const register = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
+        const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+        const password = req.body.password;
 
-        if (!username || !email || !password) {
+        if (!username || !email || typeof password !== "string" || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Username, email, and password are required"
+            });
+        }
+
+        if (password.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: "Password must be at least 8 characters long"
             });
         }
 
@@ -36,6 +45,7 @@ const register = async (req, res) => {
             message: "User registered successfully",
             data: {
                 id: user._id,
+                _id: user._id,
                 username: user.username,
                 email: user.email,
                 role: user.role
@@ -43,6 +53,12 @@ const register = async (req, res) => {
         });
     } catch (e) {
         console.error("Register error:", e);
+        if (e.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "An account with this email already exists"
+            });
+        }
         return res.status(500).json({
             success: false,
             message: "Something went wrong"
@@ -52,7 +68,8 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+        const { password } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({
@@ -100,6 +117,7 @@ const login = async (req, res) => {
                 accessToken,
                 user: {
                     id: user._id,
+                    _id: user._id,
                     username: user.username,
                     email: user.email,
                     role: user.role,
@@ -129,7 +147,6 @@ const refreshAccessToken = async (req, res) => {
 
     try {
         const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-
         const user = await User.findById(decoded.id);
 
         if (!user || user.refreshToken !== refreshToken) {
@@ -139,7 +156,6 @@ const refreshAccessToken = async (req, res) => {
             });
         }
 
-        // Rotate refresh token
         const newRefreshToken = generateRefreshToken(user);
         const accessToken = generateToken(user);
 
@@ -178,7 +194,12 @@ const logout = async (req, res) => {
             }
         }
 
-        res.clearCookie("refreshToken", { path: "/" });
+        res.clearCookie("refreshToken", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/"
+        });
 
         return res.status(200).json({
             success: true,
