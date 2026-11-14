@@ -60,6 +60,9 @@ app.use((err, req, res, next) => {
         const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
         return res.status(status).json({ success: false, message: err.message });
     }
+    if (err && err.message === "Only image files (jpeg, jpg, png, gif, webp) are allowed") {
+        return res.status(400).json({ success: false, message: err.message });
+    }
     if (err) {
         console.error("Unhandled request error:", err);
         return res.status(500).json({ success: false, message: "Internal server error" });
