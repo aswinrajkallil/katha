@@ -81,3 +81,10 @@ app.use((err, req, res, next) => {
         message: 'Something went wrong'
     });
 });
+
+
+
+// Start the Express server
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
