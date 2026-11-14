@@ -6,7 +6,13 @@ const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 // GET /api/users/:id — Public profile
 const getUserProfile = async (req, res) => {
     try {
-        const { id } = req.params;
+        // Public profile route uses :id; /profile uses the authenticated user's ID.
+        const id = req.params.id || req.user?.id;
+
+        if (!id) {
+            return res.status(400).json({ success: false, message: "User ID is required" });
+        }
+
         const query = isValidId(id) ? { _id: id } : { username: id };
 
         const user = await User.findOne(query).select("-password -refreshToken -email");
