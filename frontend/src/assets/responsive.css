@@ -1,0 +1,66 @@
+/* Responsive utilities for Kathā */
+/* Mobile first */
+
+/* Breakpoints */
+@media (min-width: 576px) {
+  .container {
+    max-width: 540px;
+  }
+}
+@media (min-width: 768px) {
+  .container {
+    max-width: 720px;
+  }
+}
+@media (min-width: 992px) {
+  .container {
+    max-width: 960px;
+  }
+}
+@media (min-width: 1200px) {
+  .container {
+    max-width: 1140px;
+  }
+}
+
+/* Navbar responsive */
+.navbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  background-color: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+.navbar .nav-items {
+  display: flex;
+  gap: 1rem;
+}
+/* Collapse on small screens */
+@media (max-width: 767px) {
+  .navbar .nav-items {
+    display: none;
+  }
+  .navbar .menu-toggle {
+    display: block;
+  }
+}
+
+/* Post Card responsive */
+.post-card {
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 768px) {
+  .post-card {
+    flex-direction: row;
+  }
+}
+
+/* Comment thread indentation */
+.comment-item {
+  margin-left: 1rem;
+  border-left: 2px solid var(--color-border);
+  padding-left: 0.5rem;
+}
