@@ -64,6 +64,20 @@ app.get("/", (req, res) => {
     res.json({ success: true, message: "Kathā API is running" });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+import multer from 'multer';
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+    // Multer file upload errors
+    if (err instanceof multer.MulterError || err.message) {
+        return res.status(400).json({
+            success: false,
+            message: err.message || 'File upload error'
+        });
+    }
+    console.error('Unexpected error:', err);
+    res.status(500).json({
+        success: false,
+        message: 'Something went wrong'
+    });
 });

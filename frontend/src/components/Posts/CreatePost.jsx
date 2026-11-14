@@ -42,7 +42,13 @@ const CreatePost = () => {
             if (coverImage) body.append("coverImage", coverImage);
 
             const res = await apiFetch("/posts", { method: "POST", body });
-            const data = await res.json();
+            let data;
+            try {
+                data = await res.json();
+            } catch {
+                const text = await res.text();
+                data = { message: text };
+            }
 
             if (!res.ok) {
                 setError(data.message || "Failed to create post");

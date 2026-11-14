@@ -47,7 +47,13 @@ const createPost = async (req, res) => {
             excerpt: excerpt || null,
             type,
             videoUrl: videoUrl || null,
-            tags: tags || [],
+            // Normalize tags to an array of strings
+            tags: (() => {
+                if (!tags) return [];
+                if (Array.isArray(tags)) return tags;
+                // If a single comma‑separated string
+                return tags.split(',').map(t => t.trim()).filter(Boolean);
+            })(),
             status: status || "draft",
             author: req.user.id  // Always from token, never from body
         };
@@ -71,10 +77,19 @@ const createPost = async (req, res) => {
             data: post
         });
     } catch (e) {
-        console.error("createPost error:", e);
+        console.error('createPost error details:', e);
+        // Handle Mongoose validation errors
+        if (e.name === 'ValidationError') {
+            const messages = Object.values(e.errors).map(err => err.message).join(', ');
+            return res.status(400).json({
+                success: false,
+                message: messages || e.message
+            });
+        }
+        const errMsg = e.message || 'Something went wrong';
         return res.status(500).json({
             success: false,
-            message: "Something went wrong"
+            message: errMsg
         });
     }
 };
