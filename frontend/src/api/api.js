@@ -70,7 +70,11 @@ const apiFetch = async (path, options = {}) => {
         return response;
     }
 
-    const newAccessToken = await refreshAccessToken();
+    // Another request may already have refreshed the token while this request was in flight.
+    const latestToken = localStorage.getItem("accessToken");
+    const newAccessToken = latestToken && latestToken !== accessToken
+        ? latestToken
+        : await refreshAccessToken();
     response = await sendRequest(newAccessToken);
     return response;
 };
