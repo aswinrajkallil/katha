@@ -73,7 +73,7 @@ const PostCard = ({ post, onDelete }) => {
             )}
 
             <div style={{ fontSize: 13, color: "#888", display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <span>By {post.author?.username || "Unknown"}</span>
+                <span>By {post.author?.username ? <Link to={`/profile/${post.author.username}`}>@{post.author.username}</Link> : "Unknown"}</span>
                 <span>{new Date(post.createdAt).toLocaleDateString()}</span>
                 <span>👁 {post.views}</span>
                 {post.tags?.length > 0 && (
