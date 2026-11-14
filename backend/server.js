@@ -24,7 +24,18 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-connectDB();
+// Start the API only after MongoDB is connected successfully.
+const startServer = async () => {
+    try {
+        await connectDB();
+        app.listen(PORT, () => {
+            console.log(`Server is running on http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error("Failed to start server because MongoDB connection failed:", error);
+        process.exit(1);
+    }
+};
 
 app.use(cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
@@ -84,7 +95,5 @@ app.use((err, req, res, next) => {
 
 
 
-// Start the Express server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+
+startServer();
