@@ -26,7 +26,13 @@ const Login = () => {
                 body: JSON.stringify(formData)
             });
 
-            const data = await response.json();
+            const responseText = await response.text();
+            let data = {};
+            try {
+                data = responseText ? JSON.parse(responseText) : {};
+            } catch {
+                throw new Error(`Server returned an invalid response (HTTP ${response.status})`);
+            }
 
             if (!response.ok) {
                 setError(data.message || "Login failed");
@@ -36,7 +42,10 @@ const Login = () => {
             login(data.data.accessToken, data.data.user);
             navigate("/");
         } catch (e) {
-            setError("Something went wrong. Please try again.");
+            console.error("Login request failed:", e);
+            setError(e.message === "Failed to fetch"
+                ? "Cannot reach the server. Check that the backend is running and VITE_API_URL is correct."
+                : e.message || "Login failed. Check the browser console and backend terminal.");
         } finally {
             setLoading(false);
         }
