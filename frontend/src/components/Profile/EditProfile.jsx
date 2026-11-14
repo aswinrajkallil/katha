@@ -8,6 +8,7 @@ export default function EditProfile() {
     const navigate = useNavigate();
     const [form, setForm] = useState({ username: "", fullName: "", bio: "", location: "", website: "" });
     const [image, setImage] = useState(null);
+    const [cover, setCover] = useState(null);
     const [preview, setPreview] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -28,6 +29,14 @@ export default function EditProfile() {
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.message || "Unable to update profile");
             updateUser(data.data);
+            if (cover) {
+                const coverBody = new FormData();
+                coverBody.append("coverImage", cover);
+                const coverRes = await apiFetch("/users/profile/cover", { method: "PUT", body: coverBody });
+                const coverData = await coverRes.json();
+                if (!coverRes.ok || !coverData.success) throw new Error(coverData.message || "Profile saved, but cover image upload failed");
+                updateUser(coverData.data);
+            }
             navigate(`/profile/${data.data.username}`);
         } catch (err) { setError(err.message || "Unable to update profile"); }
         finally { setLoading(false); }
@@ -40,6 +49,7 @@ export default function EditProfile() {
                 <label key={name}>{label}<input name={name} value={form[name]} onChange={change} required={name === "username"} style={{ display: "block", boxSizing: "border-box", width: "100%", padding: 10, marginTop: 5 }} /></label>)}
             <label>Bio<textarea name="bio" value={form.bio} onChange={change} maxLength={300} rows={4} style={{ display: "block", width: "100%", boxSizing: "border-box", padding: 10, marginTop: 5 }} /><small>{form.bio.length}/300</small></label>
             <label>Profile picture<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e => { const file=e.target.files?.[0]; setImage(file || null); setPreview(file ? URL.createObjectURL(file) : ""); }} /></label>
+            <label>Cover image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e => setCover(e.target.files?.[0] || null)} /></label>
             {preview && <img src={preview} alt="New profile preview" style={{ width: 100, height: 100, objectFit: "cover", borderRadius: "50%" }} />}
             {error && <p role="alert" style={{ color: "crimson" }}>{error}</p>}
             <div style={{ display: "flex", gap: 10 }}><button disabled={loading}>{loading ? "Saving..." : "Save changes"}</button><button type="button" onClick={() => navigate(-1)}>Cancel</button></div>
