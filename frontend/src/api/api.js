@@ -29,8 +29,12 @@ const apiFetch = async (path, options = {}) => {
     let accessToken = localStorage.getItem("accessToken");
     let response = await sendRequest(accessToken);
 
-    // If not a 401, return as-is
-    if (response.status !== 401) {
+    // Authentication endpoints must return their own 401 responses.
+    // Do not try refreshing a session when login/register credentials are rejected.
+    const isAuthEndpoint = ["/login", "/register", "/refresh", "/logout"].includes(path);
+
+    // Only refresh protected API requests, never login/register requests.
+    if (response.status !== 401 || isAuthEndpoint) {
         return response;
     }
 
