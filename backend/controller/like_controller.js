@@ -17,7 +17,7 @@ const likePost = async (req, res) => {
             throw error;
         }
         if (post.author.toString() !== req.user.id) {
-            await Notification.create({ recipient: post.author, sender: req.user.id, type: "LIKE", post: postId });
+            await Notification.create({ recipient: post.author, sender: req.user.id, type: "LIKE", post: postId }).catch(error => console.error("Like notification failed:", error));
         }
         const likes = await Like.countDocuments({ post: postId });
         return res.status(201).json({ success: true, message: "Post liked", data: { likes } });
