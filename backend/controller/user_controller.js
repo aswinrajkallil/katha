@@ -61,7 +61,7 @@ const updateProfile = async (req, res) => {
         if (user.username && !/^[a-zA-Z0-9_]{3,30}$/.test(user.username)) {
             return res.status(400).json({ success: false, message: "Username must be 3–30 characters using letters, numbers or underscores" });
         }
-        if (user.bio.length > 300) return res.status(400).json({ success: false, message: "Bio cannot exceed 300 characters" });
+        if (typeof user.bio === "string" && user.bio.length > 300) return res.status(400).json({ success: false, message: "Bio cannot exceed 300 characters" });
         if (user.website && !/^https?:\/\//i.test(user.website)) {
             return res.status(400).json({ success: false, message: "Website must start with http:// or https://" });
         }
