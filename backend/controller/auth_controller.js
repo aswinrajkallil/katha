@@ -7,10 +7,10 @@ import { generateRefreshToken, generateToken } from "../utils/jwt.js";
 const hashToken = token => createHash("sha256").update(token).digest("hex");
 const tokenMatches = (stored, token) => {
     if (!stored || !token) return false;
+    if (!/^[a-f0-9]{64}$/i.test(stored)) return stored === token; // legacy plaintext token during migration
     const candidate = hashToken(token);
-    const expected = stored.length === candidate.length ? stored : candidate;
-    try { return timingSafeEqual(Buffer.from(expected), Buffer.from(candidate)); }
-    catch { return stored === token; }
+    try { return timingSafeEqual(Buffer.from(stored, "hex"), Buffer.from(candidate, "hex")); }
+    catch { return false; }
 };
 
 const setRefreshCookie = (res, token) => res.cookie("refreshToken", token, {
