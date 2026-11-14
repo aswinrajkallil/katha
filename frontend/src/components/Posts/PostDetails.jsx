@@ -17,22 +17,24 @@ const PostDetails = () => {
     const [userLiked, setUserLiked] = useState(false);
     const [bookmarked, setBookmarked] = useState(false);
     const [likeLoading, setLikeLoading] = useState(false);
+    const [bookmarkLoading, setBookmarkLoading] = useState(false);
     const [comments, setComments] = useState([]);
 
     useEffect(() => {
+        let active = true;
+
         const fetchPost = async () => {
             try {
                 const res = await apiFetch(`/posts/${id}`);
                 const data = await res.json();
-                if (data.success) {
-                    setPost(data.data);
-                } else {
-                    setError(data.message || "Post not found");
+                if (!res.ok || !data.success) {
+                    throw new Error(data.message || "Post not found");
                 }
+                if (active) setPost(data.data);
             } catch (e) {
-                setError("Failed to load post");
+                if (active) setError(e.message || "Failed to load post");
             } finally {
-                setLoading(false);
+                if (active) setLoading(false);
             }
         };
 
@@ -40,7 +42,7 @@ const PostDetails = () => {
             try {
                 const res = await apiFetch(`/posts/${id}/likes`);
                 const data = await res.json();
-                if (data.success) {
+                if (active && data.success) {
                     setLikes(data.data.likes);
                     setUserLiked(data.data.userLiked);
                 }
@@ -51,38 +53,76 @@ const PostDetails = () => {
             try {
                 const res = await apiFetch(`/posts/${id}/comments`);
                 const data = await res.json();
-                if (data.success) setComments(data.data);
+                if (active && data.success) setComments(data.data);
             } catch (_) {}
         };
 
         fetchPost();
         fetchLikes();
         fetchComments();
+
+        return () => { active = false; };
     }, [id]);
+
+    useEffect(() => {
+        let active = true;
+
+        const fetchBookmarkStatus = async () => {
+            if (!user?._id) {
+                setBookmarked(false);
+                return;
+            }
+
+            try {
+                const res = await apiFetch(`/posts/${id}/bookmark`);
+                const data = await res.json();
+                if (active && res.ok && data.success) {
+                    setBookmarked(Boolean(data.data.bookmarked));
+                }
+            } catch (_) {
+                if (active) setBookmarked(false);
+            }
+        };
+
+        fetchBookmarkStatus();
+        return () => { active = false; };
+    }, [id, user?._id]);
 
     const handleLike = async () => {
         if (!user) { navigate("/login"); return; }
+        if (likeLoading) return;
+
         setLikeLoading(true);
         try {
             const method = userLiked ? "DELETE" : "POST";
             const res = await apiFetch(`/posts/${id}/like`, { method });
             const data = await res.json();
-            if (data.success) {
+            if (res.ok && data.success) {
                 setLikes(data.data.likes);
-                setUserLiked(!userLiked);
+                setUserLiked(method === "POST");
             }
-        } catch (_) {}
-        setLikeLoading(false);
+        } catch (_) {
+            // Keep the existing state if the request fails.
+        } finally {
+            setLikeLoading(false);
+        }
     };
 
     const handleBookmark = async () => {
         if (!user) { navigate("/login"); return; }
+        if (bookmarkLoading) return;
+
+        setBookmarkLoading(true);
         try {
             const method = bookmarked ? "DELETE" : "POST";
             const res = await apiFetch(`/posts/${id}/bookmark`, { method });
             const data = await res.json();
-            if (data.success) setBookmarked(!bookmarked);
-        } catch (_) {}
+            if (res.ok && data.success) setBookmarked(method === "POST");
+        } catch (_) {
+            // Keep the existing state if the request fails.
+        } finally {
+            setBookmarkLoading(false);
+        }
     };
 
     const handleDelete = async () => {
@@ -94,11 +134,26 @@ const PostDetails = () => {
     };
 
     const handleCommentAdded = (newComment) => {
-        setComments((prev) => [newComment, ...prev]);
+        setComments((prev) => {
+            const parentId = newComment.parentComment?._id || newComment.parentComment;
+            if (!parentId) return [...prev, newComment];
+
+            return prev.map((comment) =>
+                comment._id === parentId
+                    ? { ...comment, replies: [...(comment.replies || []), newComment] }
+                    : comment
+            );
+        });
     };
 
     const handleCommentDeleted = (commentId) => {
-        setComments((prev) => prev.filter((c) => c._id !== commentId));
+        setComments((prev) => prev
+            .filter((comment) => comment._id !== commentId)
+            .map((comment) => ({
+                ...comment,
+                replies: (comment.replies || []).filter((reply) => reply._id !== commentId)
+            }))
+        );
     };
 
     if (loading) return <p style={{ padding: 24 }}>Loading...</p>;
@@ -184,7 +239,8 @@ const PostDetails = () => {
                 </button>
                 <button
                     onClick={handleBookmark}
-                    style={{ padding: "8px 16px", cursor: "pointer", background: bookmarked ? "#2a9d8f" : "#eee", color: bookmarked ? "#fff" : "#000", border: "none", borderRadius: 4 }}
+                    disabled={bookmarkLoading}
+                    style={{ padding: "8px 16px", cursor: bookmarkLoading ? "wait" : "pointer", background: bookmarked ? "#2a9d8f" : "#eee", color: bookmarked ? "#fff" : "#000", border: "none", borderRadius: 4 }}
                 >
                     {bookmarked ? "🔖 Bookmarked" : "📌 Bookmark"}
                 </button>
