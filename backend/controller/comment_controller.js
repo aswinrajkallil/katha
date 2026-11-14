@@ -14,11 +14,15 @@ const createComment = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid post ID" });
         }
 
-        if (!content || !content.trim()) {
+        if (typeof content !== "string" || !content.trim()) {
             return res.status(400).json({ success: false, message: "Comment content is required" });
         }
 
-        const post = await Post.findById(postId);
+        if (content.trim().length > 2000) {
+            return res.status(400).json({ success: false, message: "Comment cannot exceed 2000 characters" });
+        }
+
+        const post = await Post.findById(postId).select("status");
         if (!post || post.status !== "published") {
             return res.status(404).json({ success: false, message: "Post not found or not published" });
         }
@@ -29,9 +33,27 @@ const createComment = async (req, res) => {
             content: content.trim()
         };
 
-        if (parentComment && isValidId(parentComment)) {
-            const parent = await Comment.findById(parentComment);
-            if (parent) commentData.parentComment = parentComment;
+        if (parentComment !== undefined && parentComment !== null && parentComment !== "") {
+            if (!isValidId(parentComment)) {
+                return res.status(400).json({ success: false, message: "Invalid parent comment ID" });
+            }
+
+            // Replies are intentionally limited to one level. The parent must be
+            // a top-level comment belonging to this same post.
+            const parent = await Comment.findOne({
+                _id: parentComment,
+                post: postId,
+                parentComment: null
+            }).select("_id");
+
+            if (!parent) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Replies must target a top-level comment on this post"
+                });
+            }
+
+            commentData.parentComment = parent._id;
         }
 
         const comment = await Comment.create(commentData);
@@ -57,20 +79,29 @@ const getComments = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid post ID" });
         }
 
-        // Get top-level comments (parentComment is null)
         const comments = await Comment.find({ post: postId, parentComment: null })
             .populate("author", "username profileImage")
             .sort({ createdAt: 1 });
 
-        // Get replies for each comment
-        const commentsWithReplies = await Promise.all(
-            comments.map(async (comment) => {
-                const replies = await Comment.find({ parentComment: comment._id })
-                    .populate("author", "username profileImage")
-                    .sort({ createdAt: 1 });
-                return { ...comment.toObject(), replies };
-            })
-        );
+        const commentIds = comments.map((comment) => comment._id);
+        const replies = await Comment.find({
+            post: postId,
+            parentComment: { $in: commentIds }
+        })
+            .populate("author", "username profileImage")
+            .sort({ createdAt: 1 });
+
+        const repliesByParent = new Map();
+        for (const reply of replies) {
+            const parentId = reply.parentComment.toString();
+            if (!repliesByParent.has(parentId)) repliesByParent.set(parentId, []);
+            repliesByParent.get(parentId).push(reply);
+        }
+
+        const commentsWithReplies = comments.map((comment) => ({
+            ...comment.toObject(),
+            replies: repliesByParent.get(comment._id.toString()) || []
+        }));
 
         return res.status(200).json({
             success: true,
@@ -93,8 +124,8 @@ const updateComment = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid comment ID" });
         }
 
-        if (!content || !content.trim()) {
-            return res.status(400).json({ success: false, message: "Content is required" });
+        if (typeof content !== "string" || !content.trim() || content.trim().length > 2000) {
+            return res.status(400).json({ success: false, message: "Content must be between 1 and 2000 characters" });
         }
 
         const comment = await Comment.findById(id);
@@ -119,6 +150,7 @@ const updateComment = async (req, res) => {
             data: comment
         });
     } catch (e) {
+        console.error("updateComment error:", e);
         return res.status(500).json({ success: false, message: "Something went wrong" });
     }
 };
@@ -144,12 +176,12 @@ const deleteComment = async (req, res) => {
             return res.status(403).json({ success: false, message: "Not authorized" });
         }
 
-        // Also delete replies to this comment
         await Comment.deleteMany({ parentComment: id });
         await Comment.findByIdAndDelete(id);
 
         return res.status(200).json({ success: true, message: "Comment deleted" });
     } catch (e) {
+        console.error("deleteComment error:", e);
         return res.status(500).json({ success: false, message: "Something went wrong" });
     }
 };
