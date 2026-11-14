@@ -54,7 +54,7 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
         setLoading(true);
         setError("");
         try {
-            const path = myPosts ? "/posts/my" : authorId ? `/posts/user/${authorId}` : "/posts";
+            const path = myPosts ? "/posts/my" : authorId ? `/users/${encodeURIComponent(authorId)}/posts` : "/posts";
             const response = await apiFetch(`${path}?${queryString}`);
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.message || "Failed to load posts");
