@@ -51,7 +51,7 @@ const login = async (req, res) => {
         setRefreshCookie(res, refreshToken);
         return res.json({ success: true, message: "Logged in successfully", data: {
             accessToken, user: { id: user._id, _id: user._id, username: user.username, fullName: user.fullName,
-                email: user.email, role: user.role, profileImage: user.profileImage, bio: user.bio }
+                email: user.email, role: user.role, profileImage: user.profileImage, coverImage: user.coverImage, bio: user.bio, location: user.location, website: user.website }
         } });
     } catch (error) {
         console.error("login:", error);
