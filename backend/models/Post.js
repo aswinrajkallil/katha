@@ -66,7 +66,7 @@ const postSchema = new mongoose.Schema(
 );
 
 // Auto-generate unique slug from title
-postSchema.pre("save", async function (next) {
+postSchema.pre("save", async function () {
     if (this.isModified("title") || this.isNew) {
         const baseSlug = this.title
             .toLowerCase()
@@ -89,14 +89,12 @@ postSchema.pre("save", async function (next) {
 
         this.slug = slug;
     }
-    next();
 });
 
 // Indexes for performance
 postSchema.index({ author: 1, status: 1 });
 postSchema.index({ category: 1 });
 postSchema.index({ status: 1, createdAt: -1 });
-postSchema.index({ slug: 1 });
 postSchema.index({ title: "text", content: "text" });
 
 const Post = mongoose.model("Post", postSchema);
