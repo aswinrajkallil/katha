@@ -15,6 +15,7 @@ import Bookmarks from "./pages/Bookmarks";
 import FollowingFeed from "./pages/FollowingFeed";
 import Notifications from "./pages/Notifications";
 import Search from "./pages/Search";
+import Connections from "./pages/Connections";
 import NotFound from "./pages/NotFound";
 
 const ProtectedRoute = ({ children }) => {
@@ -34,6 +35,7 @@ function AppRoutes() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/profile/:id" element={<Profile />} />
+            <Route path="/profile/:id/:relation" element={<Connections />} />
             <Route path="/posts/:id" element={<PostDetails />} />
             <Route path="/posts/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
             <Route path="/posts/:id/edit" element={<ProtectedRoute><EditPost /></ProtectedRoute>} />
