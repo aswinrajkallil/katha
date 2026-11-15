@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiFetch from "../../api/api";
+import BackButton from "../BackButton";
 
 const CreatePost = () => {
     const [formData, setFormData] = useState({
@@ -65,6 +66,7 @@ const CreatePost = () => {
 
     return (
         <div style={{ maxWidth: 700, margin: "40px auto", padding: 24 }}>
+            <BackButton />
             <h2>Create New Post</h2>
             <form onSubmit={handleSubmit}>
                 <div style={{ marginBottom: 16 }}>

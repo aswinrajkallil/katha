@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import apiFetch from "../../api/api";
 import CommentList from "../Comments/CommentList";
 import CommentForm from "../Comments/CommentForm";
+import BackButton from "../BackButton";
 
 const PostDetails = () => {
     const { id } = useParams();
@@ -166,6 +167,7 @@ const PostDetails = () => {
 
     return (
         <div style={{ maxWidth: 800, margin: "40px auto", padding: 24 }}>
+            <BackButton />
             <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{
                     background: post.type === "video" ? "#e63946" : "#2a9d8f",

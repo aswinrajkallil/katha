@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import apiFetch from "../api/api";
+import BackButton from "../components/BackButton";
 
 const notificationText = item => {
     const name = item.sender?.fullName || item.sender?.username || "Someone";
@@ -35,6 +36,7 @@ export default function Notifications() {
         if (res.ok) { setItems(old => old.map(item => ({ ...item, isRead: true }))); setUnread(0); }
     };
     return <main style={{ maxWidth: 760, margin: "32px auto", padding: 20 }}>
+        <BackButton />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h1>Notifications {unread > 0 && <small>({unread} unread)</small>}</h1>
             <button onClick={markAll} disabled={!unread}>Mark all read</button>

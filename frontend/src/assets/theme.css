@@ -1,13 +1,17 @@
-/* Theme variables and base styles for Kathā */
+/* Theme variables and base styles for Kathā (orange theme) */
 :root {
-  /* Colour palette */
-  --color-bg-primary: #FFFFFF;
+  /* Orange colour palette */
+  --color-primary: #FF7518;
+  --color-primary-dark: #E66A15;
+  --color-primary-light: #FFE5D0;
+  --color-on-primary: #ffffff;
+
+  --color-bg-primary: #ffffff;
   --color-bg-secondary: #F7F8FA;
   --color-text-primary: #202124;
   --color-text-secondary: #70757A;
-  --color-accent: #087F6E;
-  --color-accent-hover: #06695B;
   --color-border: #E8EAED;
+  --color-hover: #f3f4f6;
 
   /* Font settings */
   --font-family-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -33,24 +37,51 @@ html, body {
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-primary);
   text-decoration: none;
 }
 a:hover {
-  color: var(--color-accent-hover);
+  color: var(--color-primary-dark);
 }
 
-button {
+/* DO NOT style every button globally — only opt-in classes */
+
+/* Primary button class — use on CTA buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   cursor: pointer;
-  background-color: var(--color-accent);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+.btn-primary:hover {
+  background-color: var(--color-primary-dark);
+}
+
+/* Danger button (logout etc.) */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  background-color: #dc2626;
   color: #fff;
   border: none;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
-  font-size: 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
 }
-button:hover {
-  background-color: var(--color-accent-hover);
+.btn-danger:hover {
+  background-color: #b91c1c;
 }
 
 /* Utility classes */

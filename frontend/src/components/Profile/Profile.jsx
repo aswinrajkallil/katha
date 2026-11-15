@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import apiFetch from "../../api/api";
 import PostList from "../Posts/PostList";
+import BackButton from "../BackButton";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 export default function Profile() {
     const { id } = useParams();
-    const { user: currentUser } = useAuth();
+    const navigate = useNavigate();
+    const { user: currentUser, logout } = useAuth();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
+    const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -42,12 +45,27 @@ export default function Profile() {
         finally { setBusy(false); }
     };
 
+    const handleLogout = async () => {
+        setShowLogoutDialog(false);
+        await logout();
+        navigate("/login");
+    };
+
+    // Close dialog on Esc
+    useEffect(() => {
+        if (!showLogoutDialog) return;
+        const esc = (e) => e.key === "Escape" && setShowLogoutDialog(false);
+        document.addEventListener("keydown", esc);
+        return () => document.removeEventListener("keydown", esc);
+    }, [showLogoutDialog]);
+
     if (loading) return <p style={{ padding: 24 }}>Loading profile...</p>;
     if (error && !profile) return <p role="alert" style={{ padding: 24 }}>{error}</p>;
     if (!profile) return null;
     const own = profile.isOwnProfile || currentUser?._id === profile._id;
 
     return <main style={{ maxWidth: 900, margin: "32px auto", padding: 20 }}>
+        <BackButton />
         <section style={{ border: "1px solid #ddd", borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
             <div style={{ height: 180, background: "#eee", backgroundImage: profile.coverImage ? `url(${API_URL}${profile.coverImage})` : "linear-gradient(120deg,#202938,#64748b)", backgroundSize: "cover", backgroundPosition: "center" }} />
             <div style={{ padding: 22 }}>
@@ -58,8 +76,13 @@ export default function Profile() {
                         <h1 style={{ margin: "0 0 4px" }}>{profile.fullName || profile.username}</h1>
                         <p style={{ margin: 0, color: "#777" }}>@{profile.username}</p>
                     </div>
-                    {own ? <Link to="/profile/edit"><button>Edit profile</button></Link> :
-                        currentUser && <button disabled={busy} onClick={handleFollow}>{busy ? "Please wait..." : profile.isFollowing ? "Following · Unfollow" : "Follow"}</button>}
+                    {own ? (
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <Link to="/profile/edit"><button className="btn-primary">Edit profile</button></Link>
+                            <button className="btn-danger" onClick={() => setShowLogoutDialog(true)}>Log out</button>
+                        </div>
+                    ) :
+                        currentUser && <button className="btn-primary" disabled={busy} onClick={handleFollow}>{busy ? "Please wait..." : profile.isFollowing ? "Following · Unfollow" : "Follow"}</button>}
                 </div>
                 {profile.bio && <p style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{profile.bio}</p>}
                 <div style={{ display: "flex", gap: 18, flexWrap: "wrap", color: "#555" }}>
@@ -73,5 +96,49 @@ export default function Profile() {
         </section>
         <h2>Published posts</h2>
         <PostList authorId={profile.username || profile._id} />
+
+        {/* ---- Logout confirmation dialog ---- */}
+        {showLogoutDialog && (
+            <div
+                style={{
+                    position: "fixed", inset: 0, zIndex: 9999,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "rgba(0,0,0,0.4)",
+                }}
+                onClick={() => setShowLogoutDialog(false)}
+            >
+                <div
+                    style={{
+                        background: "#fff", borderRadius: 12, padding: "28px 32px",
+                        width: 340, maxWidth: "90vw",
+                        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="logout-title"
+                >
+                    <h3 id="logout-title" style={{ margin: "0 0 16px", fontSize: "1.05rem" }}>
+                        Are you sure you want to log out?
+                    </h3>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                        <button
+                            onClick={() => setShowLogoutDialog(false)}
+                            style={{
+                                background: "#e5e7eb", color: "#374151",
+                                border: "none", borderRadius: 6,
+                                padding: "0.45rem 1rem", cursor: "pointer",
+                                fontSize: "0.875rem", fontWeight: 500,
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button className="btn-danger" onClick={handleLogout}>
+                            Log out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
     </main>;
 }

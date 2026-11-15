@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import apiFetch from "../../api/api";
+import BackButton from "../BackButton";
 
 export default function EditProfile() {
     const { user, updateUser } = useAuth();
@@ -43,6 +44,7 @@ export default function EditProfile() {
     };
 
     return <main style={{ maxWidth: 620, margin: "36px auto", padding: 24 }}>
+        <BackButton />
         <h1>Edit your profile</h1>
         <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
             {[["username","Username"],["fullName","Full name"],["location","Location"],["website","Website"]].map(([name,label]) =>
