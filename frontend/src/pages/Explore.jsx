@@ -4,6 +4,7 @@ import {
   Users,
   Flame,
   Video,
+  Play,
   Eye,
   MessageCircle,
   Compass,
@@ -418,19 +419,20 @@ export default function Explore() {
           <HorizontalScroller gap={14} scrollStep={300} ariaLabel="Trending stories">
             {trending.map((post, index) => {
               const imgUrl = getCoverImageUrl(post.coverImage);
+              const isVideoPost = Boolean(post.videoUrl || post.type === "video");
 
               return (
-                <div
+                <Link
                   key={post._id}
+                  to={`/post/${post._id}`}
                   className="explore-trending-card"
-                  onClick={() => navigate(`/post/${post._id}`)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      navigate(`/post/${post._id}`);
+                  onClick={(e) => {
+                    const selection = window.getSelection()?.toString();
+                    if (selection && selection.trim().length > 0) {
+                      e.preventDefault();
                     }
                   }}
+                  aria-label={`View trending post: ${post.title}`}
                 >
                   {/* Fixed Media Box with letterbox containment over blurred background copy */}
                   <div className="explore-trending-media-box">
@@ -454,6 +456,14 @@ export default function Explore() {
                         <Flame size={32} />
                       </div>
                     )}
+
+                    {isVideoPost && (
+                      <div className="explore-trending-video-indicator" aria-hidden="true">
+                        <span className="explore-trending-play-icon">
+                          <Play size={16} fill="#ffffff" color="#ffffff" />
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Content */}
@@ -461,7 +471,16 @@ export default function Explore() {
                     <h3 className="explore-trending-title">{post.title}</h3>
 
                     <div className="explore-trending-meta">
-                      <span className="explore-trending-author">
+                      <span
+                        className="explore-trending-author"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          if (post.author?.username) {
+                            navigate(`/profile/${post.author.username}`);
+                          }
+                        }}
+                      >
                         <UserAvatar user={post.author} size={18} />
                         <span>@{post.author?.username || "unknown"}</span>
                       </span>
@@ -478,7 +497,7 @@ export default function Explore() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </HorizontalScroller>

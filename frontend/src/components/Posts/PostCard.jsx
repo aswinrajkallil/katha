@@ -36,6 +36,12 @@ const getRelativeTime = (dateStr) => {
   return `${diffYr}y ago`;
 };
 
+const getYouTubeEmbedUrl = (url) => {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+};
+
 export default function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = false }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -46,6 +52,7 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
   const [deleting, setDeleting] = useState(false);
   const [bookmarked, setBookmarked] = useState(Boolean(post.isBookmarked));
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
 
   const menuRef = useRef(null);
 
@@ -78,21 +85,48 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [menuOpen]);
 
-  const handleCardClick = () => {
-    if (!isPreview && post._id) {
-      navigate(`/post/${post._id}`);
+  // Handle click on the stretched overlay link (supports middle click & text selection guard)
+  const handleStretchedLinkClick = (e) => {
+    if (isPreview || !post._id) {
+      e.preventDefault();
+      return;
+    }
+    // Don't navigate if user is currently selecting text on the card
+    const selection = window.getSelection()?.toString();
+    if (selection && selection.trim().length > 0) {
+      e.preventDefault();
+      return;
     }
   };
 
+  // Keyboard navigation on the card
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      handleCardClick();
+    if (e.key === "Enter" && !isPreview && post._id) {
+      // If user pressed enter on an interactive button/link, don't double trigger
+      if (e.target.tagName !== "BUTTON" && e.target.tagName !== "A") {
+        navigate(`/post/${post._id}`);
+      }
+    }
+  };
+
+  // Play video button click handler
+  const handlePlayVideo = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isPreview || !post.videoUrl) return;
+
+    const embedUrl = getYouTubeEmbedUrl(post.videoUrl);
+    if (embedUrl) {
+      setIsPlayingVideo(true);
+    } else {
+      // If provider is unsupported, open URL in new tab safely
+      window.open(post.videoUrl, "_blank", "noopener,noreferrer");
     }
   };
 
   const handleShare = async (e) => {
     e.stopPropagation();
-    if (isPreview) return;
+    if (isPreview || !post._id) return;
     const url = `${window.location.origin}/post/${post._id}`;
     try {
       if (navigator.clipboard) {
@@ -108,7 +142,7 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
 
   const handleBookmarkToggle = async (e) => {
     e.stopPropagation();
-    if (isPreview) return;
+    if (isPreview || !post._id) return;
     if (!user) {
       navigate("/login");
       return;
@@ -152,16 +186,27 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
     }
   };
 
+  const youtubeEmbedUrl = post.videoUrl ? getYouTubeEmbedUrl(post.videoUrl) : null;
+
   return (
     <>
       <article
         className="reddit-post-card"
-        onClick={handleCardClick}
         onKeyDown={handleKeyDown}
-        role="link"
         tabIndex={isPreview ? -1 : 0}
         aria-label={`View post: ${post.title}`}
       >
+        {/* Stretched Link Overlay for Card Navigation (middle-click, Ctrl/Cmd-click, text-selection safe) */}
+        {!isPreview && post._id && (
+          <Link
+            to={`/post/${post._id}`}
+            className="reddit-post-stretched-link"
+            aria-label={`Read full post: ${post.title}`}
+            onClick={handleStretchedLinkClick}
+            tabIndex={-1}
+          />
+        )}
+
         {/* Header Row */}
         <div className="reddit-post-header">
           <div className="reddit-post-meta">
@@ -256,45 +301,95 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
           </p>
         )}
 
-        {/* Media Container with Blurred Dimmed Letterbox Background */}
+        {/* Media Container: Image posts or Video posts */}
         {imageUrl && (
-          <div className="reddit-media-container" onClick={(e) => e.stopPropagation()}>
-            <div
-              className="reddit-media-blur-bg"
-              style={{ backgroundImage: `url(${imageUrl})` }}
-              aria-hidden="true"
-            />
-            <img
-              src={imageUrl}
-              alt={post.title}
-              className="reddit-media-foreground"
-              loading="lazy"
-            />
-            {isVideo && (
-              <div className="reddit-video-overlay">
-                <span className="reddit-video-play-btn">
-                  <Play size={22} fill="#ffffff" color="#ffffff" />
-                </span>
-                <span className="reddit-video-badge">
-                  <VideoIcon size={12} /> Video
-                </span>
+          <div className="reddit-media-container">
+            {/* When user clicked play on video, render inline player with stopPropagation */}
+            {isVideo && isPlayingVideo && youtubeEmbedUrl ? (
+              <div
+                className="reddit-inline-video-wrap"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <iframe
+                  src={`${youtubeEmbedUrl}?autoplay=1`}
+                  title={post.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="reddit-inline-video-iframe"
+                />
               </div>
+            ) : (
+              <>
+                {/* Blurred Dimmed Letterbox Background */}
+                <div
+                  className="reddit-media-blur-bg"
+                  style={{ backgroundImage: `url(${imageUrl})` }}
+                  aria-hidden="true"
+                />
+                {/* Foreground Image */}
+                <img
+                  src={imageUrl}
+                  alt={post.title}
+                  className="reddit-media-foreground"
+                  loading="lazy"
+                />
+                {/* Video Overlay with exact hit-target Play Button */}
+                {isVideo && (
+                  <div className="reddit-video-overlay" aria-hidden="true">
+                    <button
+                      type="button"
+                      className="reddit-video-play-btn"
+                      aria-label="Play video"
+                      onClick={handlePlayVideo}
+                      tabIndex={0}
+                    >
+                      <Play size={28} fill="#ffffff" color="#ffffff" className="play-triangle-icon" />
+                    </button>
+                    <span className="reddit-video-badge">
+                      <VideoIcon size={12} /> Video
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
 
         {/* If no image but has videoUrl, show a sleek video preview container */}
         {!imageUrl && isVideo && post.videoUrl && (
-          <div className="reddit-media-container video-only-container" onClick={(e) => e.stopPropagation()}>
-            <div className="reddit-video-placeholder">
-              <span className="reddit-video-play-btn">
-                <Play size={26} fill="#ffffff" color="#ffffff" />
-              </span>
-              <span className="reddit-video-url-hint">{post.videoUrl}</span>
-            </div>
-            <span className="reddit-video-badge">
-              <VideoIcon size={12} /> Video
-            </span>
+          <div className="reddit-media-container video-only-container">
+            {isPlayingVideo && youtubeEmbedUrl ? (
+              <div
+                className="reddit-inline-video-wrap"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <iframe
+                  src={`${youtubeEmbedUrl}?autoplay=1`}
+                  title={post.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="reddit-inline-video-iframe"
+                />
+              </div>
+            ) : (
+              <div className="reddit-video-placeholder">
+                <div className="reddit-video-overlay" aria-hidden="true">
+                  <button
+                    type="button"
+                    className="reddit-video-play-btn"
+                    aria-label="Play video"
+                    onClick={handlePlayVideo}
+                    tabIndex={0}
+                  >
+                    <Play size={28} fill="#ffffff" color="#ffffff" className="play-triangle-icon" />
+                  </button>
+                  <span className="reddit-video-badge">
+                    <VideoIcon size={12} /> Video
+                  </span>
+                </div>
+                <span className="reddit-video-url-hint">{post.videoUrl}</span>
+              </div>
+            )}
           </div>
         )}
 

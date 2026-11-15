@@ -124,6 +124,37 @@
   z-index: 2;
 }
 
+.explore-trending-video-indicator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.explore-trending-play-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 2px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.explore-trending-card:hover .explore-trending-play-icon {
+  background: #e8590c;
+  border-color: #ffffff;
+  transform: scale(1.1);
+}
+
 .explore-rank-badge {
   position: absolute;
   top: 10px;
