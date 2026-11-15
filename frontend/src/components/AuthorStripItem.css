@@ -1,0 +1,144 @@
+/* Shared Author Strip Item (Floating, unboxed, blends with background) */
+.author-strip-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  width: 82px;
+  min-width: 82px;
+  flex-shrink: 0;
+  user-select: none;
+  transition: transform 0.15s ease;
+}
+
+.author-strip-item:hover {
+  transform: translateY(-2px);
+}
+
+.author-strip-clickable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.author-strip-clickable:focus-visible .author-strip-avatar-wrap {
+  box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.3);
+}
+
+.author-strip-avatar-wrap {
+  position: relative;
+  padding: 2px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.author-strip-avatar-wrap.has-new {
+  border-color: #e8590c;
+  background: linear-gradient(135deg, #e8590c, #f97316);
+  padding: 2.5px;
+}
+
+.author-strip-avatar-wrap.active-filter {
+  border-color: #e8590c;
+  box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.2);
+}
+
+.author-strip-new-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: #e8590c;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.author-strip-username {
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #374151;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.author-strip-item.selected .author-strip-username {
+  color: #e8590c;
+  font-weight: 700;
+}
+
+/* Stats (Stories & Followers count) */
+.author-strip-stats {
+  font-size: 0.685rem;
+  color: #6b7280;
+  margin-top: 2px;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 84px;
+}
+
+/* Compact Follow / Following Pill */
+.author-strip-follow-pill {
+  margin-top: 6px;
+  font-size: 0.725rem;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.author-strip-follow-pill.follow {
+  background: #e8590c;
+  color: #ffffff;
+}
+
+.author-strip-follow-pill.follow:hover {
+  background: #c2410c;
+}
+
+.author-strip-follow-pill.following {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #4b5563;
+}
+
+.author-strip-follow-pill.following:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+@media (max-width: 640px) {
+  .author-strip-follow-pill {
+    min-height: 32px;
+  }
+}

@@ -1,0 +1,89 @@
+/* Reusable Horizontal Scroller */
+.horizontal-scroller-root {
+  position: relative;
+  width: 100%;
+}
+
+.horizontal-scroller-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  padding: 4px 2px 8px 2px;
+}
+
+.horizontal-scroller-track::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* Children snap align */
+.horizontal-scroller-track > * {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+/* Floating Navigation Arrows */
+.horizontal-scroller-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  transition: all 0.15s ease;
+}
+
+.horizontal-scroller-btn:hover {
+  background: #fff7ed;
+  color: #e8590c;
+  border-color: #fed7aa;
+  transform: translateY(-50%) scale(1.06);
+}
+
+.horizontal-scroller-btn.left {
+  left: -12px;
+}
+
+.horizontal-scroller-btn.right {
+  right: -12px;
+}
+
+/* Subtle Edge Fades */
+.horizontal-scroller-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 36px;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.2s ease;
+}
+
+.horizontal-scroller-fade.left {
+  left: 0;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.95), transparent);
+}
+
+.horizontal-scroller-fade.right {
+  right: 0;
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.95), transparent);
+}
+
+/* Hide navigation arrows completely on touch devices with native swipe */
+@media (hover: none) and (pointer: coarse) {
+  .horizontal-scroller-btn {
+    display: none !important;
+  }
+}

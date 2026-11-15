@@ -3,25 +3,37 @@ import apiFetch from "../api/api";
 
 const AuthContext = createContext(null);
 
+const normalizeUser = (userData) => {
+    if (!userData) return null;
+    const id = userData._id || userData.id;
+    return { ...userData, _id: id, id };
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // On mount, try to fetch current user using stored token
     useEffect(() => {
         const token = localStorage.getItem("accessToken");
         if (token) {
             apiFetch("/me")
-                .then((res) => res.json())
+                .then(async (res) => {
+                    if (!res.ok) throw new Error("Unable to restore session");
+                    return res.json();
+                })
                 .then((data) => {
                     if (data.success) {
-                        setUser(data.data);
+                        setUser(normalizeUser(data.data));
                     } else {
                         localStorage.removeItem("accessToken");
                     }
                 })
-                .catch(() => {
-                    localStorage.removeItem("accessToken");
+                .catch((error) => {
+                    // Keep the stored token when the API is temporarily unreachable.
+                    if (error.message === "SESSION_EXPIRED") {
+                        localStorage.removeItem("accessToken");
+                        setUser(null);
+                    }
                 })
                 .finally(() => setLoading(false));
         } else {
@@ -31,21 +43,28 @@ export const AuthProvider = ({ children }) => {
 
     const login = (accessToken, userData) => {
         localStorage.setItem("accessToken", accessToken);
-        setUser(userData);
+        const normUser = normalizeUser(userData);
+        setUser(normUser);
+        try {
+            const uid = normUser?._id || normUser?.id || "guest";
+            localStorage.removeItem(`katha_welcome_seen_${uid}`);
+        } catch {
+            // Ignore storage errors
+        }
     };
 
     const logout = async () => {
         try {
             await apiFetch("/logout", { method: "POST", credentials: "include" });
         } catch (_) {
-            // ignore errors on logout
+            // Clear the local session even if the server is unreachable.
         }
         localStorage.removeItem("accessToken");
         setUser(null);
     };
 
     const updateUser = (updatedData) => {
-        setUser((prev) => ({ ...prev, ...updatedData }));
+        setUser((prev) => normalizeUser({ ...prev, ...updatedData }));
     };
 
     return (

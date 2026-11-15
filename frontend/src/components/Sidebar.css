@@ -1,0 +1,115 @@
+/* =========================================
+   DESKTOP SIDEBAR (Reddit-style)
+========================================= */
+
+.desktop-sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .desktop-sidebar {
+    display: block;
+    width: 240px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 64px; /* navbar height on desktop */
+    height: calc(100vh - 64px);
+    overflow-y: auto;
+    background: #ffffff;
+    border-right: 1px solid var(--color-border, #e8eaed);
+    padding: 1.25rem 0.85rem;
+    box-sizing: border-box;
+  }
+
+  .desktop-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--color-text-secondary, #70757a);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.5rem 0.6rem;
+  }
+
+  .sidebar-section-title + .sidebar-section-title {
+    margin-top: 1.25rem;
+  }
+
+  .sidebar-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 0.925rem;
+    font-weight: 500;
+    color: var(--color-text-primary, #202124);
+    text-decoration: none;
+    background: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    user-select: none;
+  }
+
+  /* Rounded icon tile */
+  .sidebar-icon-tile {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f3f4f6;
+    color: #4b5563;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Hover background */
+  .sidebar-link:hover {
+    background-color: #f9fafb;
+    color: #111827;
+  }
+
+  .sidebar-link:hover .sidebar-icon-tile {
+    background-color: #e5e7eb;
+    color: #111827;
+  }
+
+  /* Press (scale) effect */
+  .sidebar-link:active {
+    transform: scale(0.97);
+  }
+
+  /* Active state: light orange background, solid orange icon tile with white icon */
+  .sidebar-link.active {
+    background-color: #fff7ed;
+    color: #e8590c;
+    font-weight: 600;
+  }
+
+  .sidebar-link.active .sidebar-icon-tile {
+    background-color: #e8590c;
+    color: #ffffff;
+  }
+}

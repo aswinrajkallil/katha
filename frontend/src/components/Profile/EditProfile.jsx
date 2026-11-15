@@ -1,100 +1,60 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import apiFetch from "../../api/api";
+import BackButton from "../BackButton";
 
-const EditProfile = () => {
+export default function EditProfile() {
     const { user, updateUser } = useAuth();
     const navigate = useNavigate();
-    const [formData, setFormData] = useState({ username: "", bio: "" });
-    const [profileImage, setProfileImage] = useState(null);
+    const [form, setForm] = useState({ username: "", fullName: "", bio: "", location: "", website: "" });
+    const [image, setImage] = useState(null);
+    const [cover, setCover] = useState(null);
+    const [preview, setPreview] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const [success, setSuccess] = useState("");
 
     useEffect(() => {
-        if (user) {
-            setFormData({ username: user.username || "", bio: user.bio || "" });
-        }
+        if (!user) return;
+        setForm({ username: user.username || "", fullName: user.fullName || "", bio: user.bio || "", location: user.location || "", website: user.website || "" });
     }, [user]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError("");
-        setSuccess("");
-        setLoading(true);
-
+    const change = e => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const submit = async e => {
+        e.preventDefault(); setError(""); setLoading(true);
         try {
             const body = new FormData();
-            body.append("username", formData.username);
-            body.append("bio", formData.bio);
-            if (profileImage) body.append("profileImage", profileImage);
-
+            Object.entries(form).forEach(([key, value]) => body.append(key, value));
+            if (image) body.append("profileImage", image);
             const res = await apiFetch("/users/profile", { method: "PUT", body });
             const data = await res.json();
-
-            if (!res.ok) {
-                setError(data.message || "Failed to update profile");
-                return;
-            }
-
+            if (!res.ok || !data.success) throw new Error(data.message || "Unable to update profile");
             updateUser(data.data);
-            setSuccess("Profile updated successfully!");
-            setTimeout(() => navigate(`/profile/${user._id}`), 1000);
-        } catch (e) {
-            setError("Something went wrong");
-        } finally {
-            setLoading(false);
-        }
+            if (cover) {
+                const coverBody = new FormData();
+                coverBody.append("coverImage", cover);
+                const coverRes = await apiFetch("/users/profile/cover", { method: "PUT", body: coverBody });
+                const coverData = await coverRes.json();
+                if (!coverRes.ok || !coverData.success) throw new Error(coverData.message || "Profile saved, but cover image upload failed");
+                updateUser(coverData.data);
+            }
+            navigate(`/profile/${data.data.username}`);
+        } catch (err) { setError(err.message || "Unable to update profile"); }
+        finally { setLoading(false); }
     };
 
-    return (
-        <div style={{ maxWidth: 500, margin: "40px auto", padding: 24 }}>
-            <h2>Edit Profile</h2>
-            <form onSubmit={handleSubmit}>
-                <div style={{ marginBottom: 16 }}>
-                    <label>Username</label><br />
-                    <input
-                        type="text"
-                        name="username"
-                        value={formData.username}
-                        onChange={handleChange}
-                        style={{ width: "100%", padding: 8, marginTop: 4 }}
-                    />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                    <label>Bio</label><br />
-                    <textarea
-                        name="bio"
-                        value={formData.bio}
-                        onChange={handleChange}
-                        rows={4}
-                        placeholder="Tell readers about yourself..."
-                        style={{ width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit" }}
-                    />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                    <label>Profile Image</label><br />
-                    <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setProfileImage(e.target.files[0])}
-                        style={{ marginTop: 4 }}
-                    />
-                </div>
-                {error && <p style={{ color: "red" }}>{error}</p>}
-                {success && <p style={{ color: "green" }}>{success}</p>}
-                <button type="submit" disabled={loading} style={{ padding: "10px 24px" }}>
-                    {loading ? "Saving..." : "Save Profile"}
-                </button>
-            </form>
-        </div>
-    );
-};
-
-export default EditProfile;
+    return <main style={{ maxWidth: 620, margin: "36px auto", padding: 24 }}>
+        <BackButton />
+        <h1>Edit your profile</h1>
+        <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
+            {[["username","Username"],["fullName","Full name"],["location","Location"],["website","Website"]].map(([name,label]) =>
+                <label key={name}>{label}<input name={name} value={form[name]} onChange={change} required={name === "username"} style={{ display: "block", boxSizing: "border-box", width: "100%", padding: 10, marginTop: 5 }} /></label>)}
+            <label>Bio<textarea name="bio" value={form.bio} onChange={change} maxLength={300} rows={4} style={{ display: "block", width: "100%", boxSizing: "border-box", padding: 10, marginTop: 5 }} /><small>{form.bio.length}/300</small></label>
+            <label>Profile picture<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e => { const file=e.target.files?.[0]; setImage(file || null); setPreview(file ? URL.createObjectURL(file) : ""); }} /></label>
+            <label>Cover image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e => setCover(e.target.files?.[0] || null)} /></label>
+            {preview && <img src={preview} alt="New profile preview" style={{ width: 100, height: 100, objectFit: "cover", borderRadius: "50%" }} />}
+            {error && <p role="alert" style={{ color: "crimson" }}>{error}</p>}
+            <div style={{ display: "flex", gap: 10 }}><button disabled={loading}>{loading ? "Saving..." : "Save changes"}</button><button type="button" onClick={() => navigate(-1)}>Cancel</button></div>
+        </form>
+    </main>;
+}

@@ -3,50 +3,56 @@ import Post from "../models/Post.js";
 import Like from "../models/Like.js";
 import Comment from "../models/Comment.js";
 import Bookmark from "../models/Bookmark.js";
+import cloudinary from "../config/cloudinary.js";
+import uploadToCloudinary from "../utils/cloudinaryUpload.js";
 
 // Helper: validate ObjectId
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
+// Helper: attach real comment counts to an array of posts
+const attachCommentCounts = async (posts) => {
+    if (!posts || !posts.length) return [];
+    const postIds = posts.map(p => p._id);
+    const counts = await Comment.aggregate([
+        { $match: { post: { $in: postIds } } },
+        { $group: { _id: "$post", count: { $sum: 1 } } }
+    ]);
+    const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
+    return posts.map(p => {
+        const obj = typeof p.toObject === "function" ? p.toObject() : { ...p };
+        return {
+            ...obj,
+            commentsCount: countMap.get(obj._id.toString()) || 0
+        };
+    });
+};
+
 // POST /api/posts — Create a post
 const createPost = async (req, res) => {
+    let uploadedImage = null;
+
     try {
         const { title, content, excerpt, type, videoUrl, tags, status, category } =
             req.body;
 
-        if (!title || !type) {
+        if (!title || !title.trim()) {
             return res.status(400).json({
                 success: false,
-                message: "Title and type are required"
+                message: "Title is required"
             });
         }
 
-        if (!["blog", "video"].includes(type)) {
-            return res.status(400).json({
-                success: false,
-                message: "Post type must be 'blog' or 'video'"
-            });
-        }
-
-        if (type === "blog" && !content) {
-            return res.status(400).json({
-                success: false,
-                message: "Content is required for blog posts"
-            });
-        }
-
-        if (type === "video" && !videoUrl) {
-            return res.status(400).json({
-                success: false,
-                message: "Video URL is required for video posts"
-            });
-        }
+        // Determine post type gracefully: if explicit type provided, use it; else if videoUrl present, mark as video; else default to blog
+        const resolvedType = (type && ["blog", "video"].includes(type))
+            ? type
+            : (videoUrl ? "video" : "blog");
 
         const postData = {
-            title,
+            title: title.trim(),
             content: content || null,
             excerpt: excerpt || null,
-            type,
-            videoUrl: videoUrl || null,
+            type: resolvedType,
+            videoUrl: videoUrl ? videoUrl.trim() : null,
             // Normalize tags to an array of strings
             tags: (() => {
                 if (!tags) return [];
@@ -62,12 +68,19 @@ const createPost = async (req, res) => {
             postData.category = category;
         }
 
-        // Handle cover image from file upload
+        // Upload cover image to Cloudinary when a file is provided
         if (req.file) {
-            postData.coverImage = `/uploads/${req.file.filename}`;
+            uploadedImage = await uploadToCloudinary(
+                req.file.buffer,
+                "katha/posts"
+            );
+            postData.coverImage = uploadedImage.url;
+            postData.coverImagePublicId = uploadedImage.publicId;
         }
 
         const post = await Post.create(postData);
+        // The database record now owns this asset; don't remove it in the catch block.
+        uploadedImage = null;
         await post.populate("author", "username email profileImage");
         await post.populate("category", "name slug");
 
@@ -77,6 +90,15 @@ const createPost = async (req, res) => {
             data: post
         });
     } catch (e) {
+        if (uploadedImage?.publicId) {
+            try {
+                await cloudinary.uploader.destroy(uploadedImage.publicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to clean up uploaded post image:", cleanupError);
+            }
+        }
         console.error('createPost error details:', e);
         // Handle Mongoose validation errors
         if (e.name === 'ValidationError') {
@@ -99,7 +121,7 @@ const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const buildPostFilters = async (filters, baseQuery = {}) => {
     const query = { ...baseQuery };
-    const { search, category, type, tags, dateRange, sort } = filters;
+    const { search, category, type, tags, dateRange, sort, author, hasVideo } = filters;
 
     if (search && typeof search === "string" && search.trim()) {
         const term = new RegExp(escapeRegex(search.trim().slice(0, 100)), "i");
@@ -129,6 +151,14 @@ const buildPostFilters = async (filters, baseQuery = {}) => {
 
     if (type && ["blog", "video"].includes(type)) query.type = type;
 
+    if (author && isValidId(author)) {
+        query.author = author;
+    }
+
+    if (hasVideo === "true" || hasVideo === true) {
+        query.videoUrl = { $exists: true, $ne: "" };
+    }
+
     if (tags) {
         const tagList = (Array.isArray(tags) ? tags : String(tags).split(","))
             .map(tag => tag.trim()).filter(Boolean).slice(0, 10);
@@ -147,9 +177,10 @@ const buildPostFilters = async (filters, baseQuery = {}) => {
     if (fromDate) query.createdAt = { $gte: fromDate, $lte: now };
 
     const sortOptions = {
-        latest: { createdAt: -1 },
-        oldest: { createdAt: 1 },
-        mostViewed: { views: -1, createdAt: -1 }
+        latest: { createdAt: -1, _id: -1 },
+        oldest: { createdAt: 1, _id: 1 },
+        mostViewed: { views: -1, createdAt: -1, _id: -1 },
+        views: { views: -1, createdAt: -1, _id: -1 }
     };
     return { query, sort: sortOptions[sort] || sortOptions.latest };
 };
@@ -167,7 +198,7 @@ const getPosts = async (req, res) => {
         const total = await Post.countDocuments(query);
         let posts;
 
-        if (req.query.sort === "mostLiked") {
+        if (req.query.sort === "mostLiked" || req.query.sort === "likes") {
             const [ranked, matchingPosts] = await Promise.all([
                 Like.aggregate([
                     { $group: { _id: "$post", likesCount: { $sum: 1 } } },
@@ -177,21 +208,43 @@ const getPosts = async (req, res) => {
                     .populate("category", "name slug").lean()
             ]);
             const rank = new Map(ranked.map((item, index) => [item._id.toString(), index]));
-            matchingPosts.sort((a, b) =>
-                (rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER) -
-                (rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER)
-            );
+            matchingPosts.sort((a, b) => {
+                const aRank = rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                const bRank = rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                if (aRank !== bRank) return aRank - bRank;
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            });
+            posts = matchingPosts.slice(skip, skip + limitNum);
+        } else if (req.query.sort === "mostCommented" || req.query.sort === "comments") {
+            const [ranked, matchingPosts] = await Promise.all([
+                Comment.aggregate([
+                    { $match: { isDeleted: { $ne: true } } },
+                    { $group: { _id: "$post", count: { $sum: 1 } } },
+                    { $sort: { count: -1 } }
+                ]),
+                Post.find(query).populate("author", "username profileImage")
+                    .populate("category", "name slug").lean()
+            ]);
+            const rank = new Map(ranked.map((item, index) => [item._id.toString(), index]));
+            matchingPosts.sort((a, b) => {
+                const aRank = rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                const bRank = rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                if (aRank !== bRank) return aRank - bRank;
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            });
             posts = matchingPosts.slice(skip, skip + limitNum);
         } else {
             posts = await Post.find(query).populate("author", "username profileImage")
                 .populate("category", "name slug").sort(sort).skip(skip).limit(limitNum);
         }
 
+        const postsWithCounts = await attachCommentCounts(posts);
+
         return res.status(200).json({
             success: true,
             message: "Posts fetched successfully",
             data: {
-                posts,
+                posts: postsWithCounts,
                 pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) }
             }
         });
@@ -225,11 +278,13 @@ const getMyPosts = async (req, res) => {
             Post.countDocuments(query)
         ]);
 
+        const postsWithCounts = await attachCommentCounts(posts);
+
         return res.status(200).json({
             success: true,
             message: "Your posts fetched successfully",
             data: {
-                posts,
+                posts: postsWithCounts,
                 pagination: {
                     total,
                     page: pageNum,
@@ -273,11 +328,13 @@ const getUserPosts = async (req, res) => {
             Post.countDocuments(query)
         ]);
 
+        const postsWithCounts = await attachCommentCounts(posts);
+
         return res.status(200).json({
             success: true,
             message: "User posts fetched",
             data: {
-                posts,
+                posts: postsWithCounts,
                 pagination: {
                     total,
                     page: pageNum,
@@ -325,11 +382,15 @@ const getPostBySlug = async (req, res) => {
 
         // Increment view count
         await Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } });
+        const commentsCount = await Comment.countDocuments({ post: post._id });
 
         return res.status(200).json({
             success: true,
             message: "Post fetched",
-            data: post
+            data: {
+                ...post.toObject(),
+                commentsCount
+            }
         });
     } catch (e) {
         console.error("getPostBySlug error:", e);
@@ -373,11 +434,15 @@ const getPostById = async (req, res) => {
         }
 
         await Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } });
+        const commentsCount = await Comment.countDocuments({ post: post._id });
 
         return res.status(200).json({
             success: true,
             message: "Post fetched",
-            data: post
+            data: {
+                ...post.toObject(),
+                commentsCount
+            }
         });
     } catch (e) {
         console.error("getPostById error:", e);
@@ -387,6 +452,8 @@ const getPostById = async (req, res) => {
 
 // PUT /api/posts/:id — Update a post
 const updatePost = async (req, res) => {
+    let uploadedImage = null;
+
     try {
         const { id } = req.params;
 
@@ -426,11 +493,33 @@ const updatePost = async (req, res) => {
             post.category = isValidId(category) ? category : null;
         }
 
+        // Upload the replacement first; keep the existing image if upload fails.
+        const previousImagePublicId = post.coverImagePublicId;
+
         if (req.file) {
-            post.coverImage = `/uploads/${req.file.filename}`;
+            uploadedImage = await uploadToCloudinary(
+                req.file.buffer,
+                "katha/posts"
+            );
+            post.coverImage = uploadedImage.url;
+            post.coverImagePublicId = uploadedImage.publicId;
         }
 
         await post.save();
+
+        // The saved post now references the new asset.
+        uploadedImage = null;
+
+        // Remove the previous Cloudinary asset only after the database save succeeds.
+        if (req.file && previousImagePublicId) {
+            try {
+                await cloudinary.uploader.destroy(previousImagePublicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to delete previous post image:", cleanupError);
+            }
+        }
         await post.populate("author", "username profileImage");
         await post.populate("category", "name slug");
 
@@ -440,6 +529,15 @@ const updatePost = async (req, res) => {
             data: post
         });
     } catch (e) {
+        if (uploadedImage?.publicId) {
+            try {
+                await cloudinary.uploader.destroy(uploadedImage.publicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to clean up replacement post image:", cleanupError);
+            }
+        }
         console.error("updatePost error:", e);
         return res.status(500).json({ success: false, message: "Something went wrong" });
     }
@@ -478,6 +576,18 @@ const deletePost = async (req, res) => {
         ]);
 
         await Post.findByIdAndDelete(id);
+
+        // Delete the Cloudinary asset if this post has one.
+        // Legacy local-upload images have no public ID and are left untouched.
+        if (post.coverImagePublicId) {
+            try {
+                await cloudinary.uploader.destroy(post.coverImagePublicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to delete post image from Cloudinary:", cleanupError);
+            }
+        }
 
         return res.status(200).json({
             success: true,
