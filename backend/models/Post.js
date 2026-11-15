@@ -29,6 +29,10 @@ const postSchema = new mongoose.Schema(
             type: String,
             default: null
         },
+        coverImagePublicId: {
+            type: String,
+            default: null
+        },
         videoUrl: {
             type: String,
             default: null
