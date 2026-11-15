@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 import MobileWriteFab from "./MobileWriteFab";
 import "./Layout.css";
 
@@ -33,6 +34,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      <BottomNav />
       <MobileWriteFab />
     </div>
   );

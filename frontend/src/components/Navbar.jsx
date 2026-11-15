@@ -1,9 +1,11 @@
-import { Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
-import { Menu, X, Search, Bell, SlidersHorizontal, Sparkles, Users, Compass, FileText, Bookmark, User } from "lucide-react";
+import { ArrowLeft, Search, Bell, SlidersHorizontal, X } from "lucide-react";
 import "./Navbar.css";
 import logoFull from "../assets/katha-logo-full.svg";
 import { useAuth } from "../context/AuthContext";
+import { getRouteInfo } from "../routes/routeConfig";
+import { useNavigationGuard } from "../context/NavigationGuardContext";
 
 const dateOptions = [
   ["", "All time"],
@@ -11,26 +13,28 @@ const dateOptions = [
   ["30days", "Last 30 days"],
   ["3months", "Last 3 months"],
   ["6months", "Last 6 months"],
-  ["thisYear", "This year"]
+  ["thisYear", "This year"],
 ];
 
 const sortOptions = [
   ["latest", "Latest first"],
   ["oldest", "Oldest first"],
-  ["mostViewed", "Most viewed"]
+  ["mostViewed", "Most viewed"],
 ];
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { triggerGuard } = useNavigationGuard();
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const drawerRef = useRef(null);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
   const filterPopoverRef = useRef(null);
   const filterBtnRef = useRef(null);
+  const mobileSearchInputRef = useRef(null);
 
   // Sync state with URL search params
   const currentQ = searchParams.get("q") || "";
@@ -40,6 +44,16 @@ export default function Navbar() {
   const [inputValue, setInputValue] = useState(currentQ);
   const [selectedTime, setSelectedTime] = useState(currentTime);
   const [selectedSort, setSelectedSort] = useState(currentSort);
+
+  // Resolve route configuration for top-level vs secondary page mode
+  const routeInfo = getRouteInfo(location.pathname, searchParams, user);
+
+  // Automatically keep mobile search input open if URL has a search query
+  useEffect(() => {
+    if (currentQ) {
+      setMobileSearchOpen(true);
+    }
+  }, [currentQ]);
 
   // Keep input synced if URL changes from outside
   useEffect(() => {
@@ -60,20 +74,22 @@ export default function Navbar() {
       const trimmed = inputValue.trim();
       const existingQ = searchParams.get("q") || "";
       if (trimmed !== existingQ) {
-        // If user is currently on an inner page like post details or create post, navigate to "/" with query
         const isFeedPage = location.pathname === "/" || location.pathname === "/my-posts";
         if (!isFeedPage && trimmed) {
           navigate(`/?q=${encodeURIComponent(trimmed)}`);
         } else {
-          setSearchParams(prev => {
-            const next = new URLSearchParams(prev);
-            if (trimmed) {
-              next.set("q", trimmed);
-            } else {
-              next.delete("q");
-            }
-            return next;
-          }, { replace: true });
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              if (trimmed) {
+                next.set("q", trimmed);
+              } else {
+                next.delete("q");
+              }
+              return next;
+            },
+            { replace: true }
+          );
         }
       }
     }, 300);
@@ -93,12 +109,15 @@ export default function Navbar() {
       const str = params.toString();
       navigate(str ? `/?${str}` : "/");
     } else {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        if (trimmed) next.set("q", trimmed);
-        else next.delete("q");
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (trimmed) next.set("q", trimmed);
+          else next.delete("q");
+          return next;
+        },
+        { replace: true }
+      );
     }
   };
 
@@ -115,21 +134,24 @@ export default function Navbar() {
       const str = params.toString();
       navigate(str ? `/?${str}` : "/");
     } else {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        if (nextTime) {
-          next.set("time", nextTime);
-        } else {
-          next.delete("time");
-        }
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (nextTime) {
+            next.set("time", nextTime);
+          } else {
+            next.delete("time");
+          }
 
-        if (nextSort && nextSort !== "latest") {
-          next.set("sort", nextSort);
-        } else {
-          next.delete("sort");
-        }
-        return next;
-      }, { replace: true });
+          if (nextSort && nextSort !== "latest") {
+            next.set("sort", nextSort);
+          } else {
+            next.delete("sort");
+          }
+          return next;
+        },
+        { replace: true }
+      );
     }
   };
 
@@ -146,22 +168,37 @@ export default function Navbar() {
   const handleResetFilters = () => {
     setSelectedTime("");
     setSelectedSort("latest");
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.delete("time");
-      next.delete("sort");
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("time");
+        next.delete("sort");
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const hasFilterActive = Boolean(currentTime || (currentSort && currentSort !== "latest"));
 
-  // Outside click & ESC listeners for drawer & filter popover / bottom sheet
+  // Mobile Back button click handler
+  const handleBackClick = () => {
+    // If a guard is registered (e.g. unsaved changes in Create/Edit post), trigger it
+    if (triggerGuard && triggerGuard()) {
+      return;
+    }
+    // Check if user arrived via inside the app or direct link
+    const hasInAppHistory = typeof window !== "undefined" && window.history.state?.idx > 0;
+    if (hasInAppHistory) {
+      navigate(-1);
+    } else {
+      navigate("/");
+    }
+  };
+
+  // Outside click & ESC listeners for filter popover / bottom sheet
   useEffect(() => {
     const handleMouseDown = (e) => {
-      if (drawerRef.current && !drawerRef.current.contains(e.target)) {
-        setDrawerOpen(false);
-      }
       if (
         filterPopoverRef.current &&
         !filterPopoverRef.current.contains(e.target) &&
@@ -174,15 +211,15 @@ export default function Navbar() {
 
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
-        setDrawerOpen(false);
         setFilterOpen(false);
+        setMobileSearchOpen(false);
       }
     };
 
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("keydown", handleKeyDown);
 
-    if (drawerOpen || (filterOpen && window.innerWidth < 1024)) {
+    if (filterOpen && window.innerWidth < 1024) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -193,34 +230,30 @@ export default function Navbar() {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [drawerOpen, filterOpen]);
+  }, [filterOpen]);
 
-  // Close overlays on route change
+  // Focus search input when mobile search toggles open
   useEffect(() => {
-    setDrawerOpen(false);
+    if (mobileSearchOpen) {
+      setTimeout(() => {
+        mobileSearchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [mobileSearchOpen]);
+
+  // Close filter overlay on route change
+  useEffect(() => {
     setFilterOpen(false);
     document.body.style.overflow = "";
   }, [location.pathname]);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login");
-  };
-
   return (
     <>
       <nav className="navbar">
-        {/* Top bar row */}
-        <div className="navbar-container">
-          {/* Mobile hamburger */}
-          <button
-            className="icon-btn menu-toggle"
-            aria-label="Open menu"
-            onClick={() => setDrawerOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
-
+        {/* =========================================
+            DESKTOP HEADER (>= 1024px)
+        ========================================= */}
+        <div className="navbar-container desktop-only-header">
           {/* Brand */}
           <Link to="/" className="navbar-brand">
             <img src={logoFull} alt="Katha logo" className="navbar-logo" />
@@ -337,40 +370,101 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Search Row (below 1024px) */}
-        <div className="navbar-mobile-search-row">
-          <form onSubmit={handleSearchSubmit} className="navbar-search mobile-navbar-search">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Search stories, ideas, videos..."
-              aria-label="Search stories, ideas, videos"
-            />
+        {/* =========================================
+            MOBILE HEADER (< 1024px)
+            Mode 1 (Top-level): Logo on left, Search & Bell on right
+            Mode 2 (Secondary): Back arrow + Title on left, Search & Bell on right
+        ========================================= */}
+        <div className="navbar-container mobile-only-header">
+          <div className="mobile-header-left">
+            {routeInfo.isTopLevel ? (
+              /* Mode 1: Top-level page - Logo on the left, NO back button */
+              <Link to="/" className="navbar-brand mobile-brand-left" aria-label="Katha Home">
+                <img src={logoFull} alt="Katha logo" className="navbar-logo" />
+              </Link>
+            ) : (
+              /* Mode 2: Secondary page - Back arrow + short title, Logo hidden */
+              <>
+                <button
+                  type="button"
+                  className="mobile-header-back-btn"
+                  onClick={handleBackClick}
+                  aria-label="Go back"
+                >
+                  <ArrowLeft size={22} color="#111111" strokeWidth={2.2} />
+                </button>
+                <h1 className="mobile-header-title" title={routeInfo.title}>
+                  {routeInfo.title}
+                </h1>
+              </>
+            )}
+          </div>
 
+          <div className="mobile-header-right">
+            {/* Search Icon button */}
             <button
               type="button"
-              className="navbar-search-filter-btn"
-              onClick={() => setFilterOpen(true)}
-              aria-label="Filters"
-              title="Filters"
+              className={`icon-btn mobile-header-icon-btn ${mobileSearchOpen ? "active" : ""}`}
+              onClick={() => setMobileSearchOpen((prev) => !prev)}
+              aria-label="Search"
+              aria-expanded={mobileSearchOpen}
             >
-              <SlidersHorizontal size={18} />
-              {hasFilterActive && <span className="filter-badge-dot" />}
+              <Search size={20} color="#111111" />
             </button>
 
-            <button
-              type="submit"
-              className="navbar-search-submit-btn"
-              aria-label="Search"
+            {/* Notifications Bell */}
+            <Link
+              to="/notifications"
+              className="icon-btn mobile-header-icon-btn"
+              aria-label="Notifications"
             >
-              <Search size={18} color="#ffffff" strokeWidth={2.5} />
-            </button>
-          </form>
+              <Bell size={20} color="#111111" />
+              <span className="notif-badge"></span>
+            </Link>
+          </div>
         </div>
+
+        {/* =========================================
+            MOBILE SEARCH ROW (Collapsible / Toggleable)
+        ========================================= */}
+        {mobileSearchOpen && (
+          <div className="navbar-mobile-search-row">
+            <form onSubmit={handleSearchSubmit} className="navbar-search mobile-navbar-search">
+              <input
+                ref={mobileSearchInputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Search stories, ideas, videos..."
+                aria-label="Search stories, ideas, videos"
+              />
+
+              <button
+                type="button"
+                className="navbar-search-filter-btn"
+                onClick={() => setFilterOpen(true)}
+                aria-label="Filters"
+                title="Filters"
+              >
+                <SlidersHorizontal size={18} />
+                {hasFilterActive && <span className="filter-badge-dot" />}
+              </button>
+
+              <button
+                type="submit"
+                className="navbar-search-submit-btn"
+                aria-label="Search"
+              >
+                <Search size={18} color="#ffffff" strokeWidth={2.5} />
+              </button>
+            </form>
+          </div>
+        )}
       </nav>
 
-      {/* Mobile Filter Bottom Sheet */}
+      {/* =========================================
+          MOBILE FILTER BOTTOM SHEET
+      ========================================= */}
       {filterOpen && (
         <div
           className="mobile-filter-backdrop"
@@ -438,133 +532,6 @@ export default function Navbar() {
           </div>
         </div>
       )}
-
-      {/* Mobile drawer backdrop - only rendered when drawer is open */}
-      {drawerOpen && (
-        <div
-          className="drawer-backdrop"
-          onClick={() => setDrawerOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-      <aside
-        ref={drawerRef}
-        className={`drawer ${drawerOpen ? "open" : ""}`}
-        aria-hidden={!drawerOpen}
-      >
-        <button
-          className="icon-btn drawer-close"
-          aria-label="Close menu"
-          onClick={() => setDrawerOpen(false)}
-        >
-          <X size={20} />
-        </button>
-
-        <nav className="drawer-nav">
-          <p className="drawer-section-title">Feeds</p>
-          <ul className="drawer-list">
-            <li>
-              <NavLink
-                to="/"
-                end
-                onClick={() => setDrawerOpen(false)}
-                className={({ isActive }) =>
-                  `drawer-link ${isActive ? "active" : ""}`
-                }
-              >
-                <span className="drawer-icon-tile">
-                  <Sparkles size={18} />
-                </span>
-                <span className="drawer-label">For You</span>
-              </NavLink>
-            </li>
-            <li>
-              <NavLink
-                to="/feed/following"
-                onClick={() => setDrawerOpen(false)}
-                className={({ isActive }) =>
-                  `drawer-link ${isActive ? "active" : ""}`
-                }
-              >
-                <span className="drawer-icon-tile">
-                  <Users size={18} />
-                </span>
-                <span className="drawer-label">Following</span>
-              </NavLink>
-            </li>
-            <li>
-              <NavLink
-                to="/explore"
-                onClick={() => setDrawerOpen(false)}
-                className={({ isActive }) =>
-                  `drawer-link ${isActive ? "active" : ""}`
-                }
-              >
-                <span className="drawer-icon-tile">
-                  <Compass size={18} />
-                </span>
-                <span className="drawer-label">Explore</span>
-              </NavLink>
-            </li>
-          </ul>
-
-          {user && (
-            <>
-              <p className="drawer-section-title">Your Space</p>
-              <ul className="drawer-list">
-                <li>
-                  <NavLink
-                    to="/my-posts"
-                    onClick={() => setDrawerOpen(false)}
-                    className={({ isActive }) =>
-                      `drawer-link ${isActive ? "active" : ""}`
-                    }
-                  >
-                    <span className="drawer-icon-tile">
-                      <FileText size={18} />
-                    </span>
-                    <span className="drawer-label">My Posts</span>
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink
-                    to="/bookmarks"
-                    onClick={() => setDrawerOpen(false)}
-                    className={({ isActive }) =>
-                      `drawer-link ${isActive ? "active" : ""}`
-                    }
-                  >
-                    <span className="drawer-icon-tile">
-                      <Bookmark size={18} />
-                    </span>
-                    <span className="drawer-label">Bookmarks</span>
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink
-                    to={`/profile/${user.username || user._id}`}
-                    onClick={() => setDrawerOpen(false)}
-                    className={({ isActive }) =>
-                      `drawer-link ${isActive ? "active" : ""}`
-                    }
-                  >
-                    <span className="drawer-icon-tile">
-                      <User size={18} />
-                    </span>
-                    <span className="drawer-label">Profile</span>
-                  </NavLink>
-                </li>
-              </ul>
-            </>
-          )}
-        </nav>
-
-        {user && (
-          <button className="drawer-logout" onClick={handleLogout}>
-            Logout
-          </button>
-        )}
-      </aside>
     </>
   );
 }

@@ -4,6 +4,8 @@ import { Type, FileText, Image as ImageIcon, Video as VideoIcon, Tag, Send } fro
 import { useToast } from "../../context/ToastContext";
 import apiFetch from "../../api/api";
 import BackButton from "../BackButton";
+import ConfirmDialog from "../ConfirmDialog";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import "./CreatePost.css";
 
 export default function EditPost() {
@@ -12,6 +14,7 @@ export default function EditPost() {
   const toast = useToast();
 
   const [formData, setFormData] = useState(null);
+  const [initialData, setInitialData] = useState(null);
   const [coverImage, setCoverImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -24,14 +27,16 @@ export default function EditPost() {
         const data = await res.json();
         if (data.success) {
           const p = data.data;
-          setFormData({
+          const initial = {
             title: p.title || "",
             content: p.content || "",
             excerpt: p.excerpt || "",
             videoUrl: p.videoUrl || "",
             tags: p.tags?.join(", ") || "",
             status: p.status || "draft",
-          });
+          };
+          setFormData(initial);
+          setInitialData(initial);
         } else {
           setError(data.message || "Post not found");
         }
@@ -43,6 +48,53 @@ export default function EditPost() {
     };
     fetchPost();
   }, [id]);
+
+  const isDirty = Boolean(
+    coverImage ||
+      (initialData &&
+        formData &&
+        (formData.title !== initialData.title ||
+          formData.content !== initialData.content ||
+          formData.excerpt !== initialData.excerpt ||
+          formData.videoUrl !== initialData.videoUrl ||
+          formData.tags !== initialData.tags ||
+          formData.status !== initialData.status))
+  );
+
+  const handleSaveDraft = async () => {
+    if (!formData) return false;
+    const body = new FormData();
+    body.append("title", formData.title.trim() || "Untitled Draft");
+    body.append("status", "draft");
+    if (formData.content.trim()) body.append("content", formData.content.trim());
+    if (formData.excerpt.trim()) body.append("excerpt", formData.excerpt.trim());
+    if (formData.videoUrl.trim()) body.append("videoUrl", formData.videoUrl.trim());
+    if (formData.tags) {
+      const tagArray = formData.tags.split(",").map((t) => t.trim()).filter(Boolean);
+      tagArray.forEach((t) => body.append("tags", t));
+    }
+    if (coverImage) body.append("coverImage", coverImage);
+
+    try {
+      const res = await apiFetch(`/posts/${id}`, { method: "PUT", body });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Draft saved successfully!");
+        return true;
+      } else {
+        toast.error(data.message || "Failed to save draft");
+        return false;
+      }
+    } catch {
+      toast.error("Failed to save draft");
+      return false;
+    }
+  };
+
+  const { confirmDialogProps } = useUnsavedChanges({
+    isDirty,
+    onSaveDraft: handleSaveDraft,
+  });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -247,6 +299,7 @@ export default function EditPost() {
           </div>
         </form>
       </div>
+      <ConfirmDialog {...confirmDialogProps} />
     </div>
   );
 }

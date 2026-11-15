@@ -65,22 +65,10 @@
   outline-offset: 2px;
 }
 
-/* Mobile: below 640px, show only the circular arrow badge */
-@media (max-width: 639px) {
+/* Mobile breakpoint: below 1024px, hide in-page back buttons so only the mobile header back button is visible */
+@media (max-width: 1023px) {
   .back-btn {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    justify-content: center;
-    border-radius: 50%;
-  }
-
-  .back-btn-text {
-    display: none;
-  }
-
-  .back-btn:hover .back-btn-icon {
-    transform: none;
+    display: none !important;
   }
 }
 

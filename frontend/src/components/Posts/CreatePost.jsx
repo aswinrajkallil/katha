@@ -15,7 +15,9 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import apiFetch from "../../api/api";
 import BackButton from "../BackButton";
+import ConfirmDialog from "../ConfirmDialog";
 import PostCard from "./PostCard";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import "./CreatePost.css";
 
 const MAX_TITLE_LENGTH = 140;
@@ -45,6 +47,49 @@ export default function CreatePost() {
   const [previewDate] = useState(() => new Date().toISOString());
 
   const fileInputRef = useRef(null);
+
+  const isDirty = Boolean(
+    title.trim() ||
+    content.trim() ||
+    excerpt.trim() ||
+    videoUrl.trim() ||
+    tags.trim() ||
+    coverImage
+  );
+
+  const handleSaveDraft = async () => {
+    const body = new FormData();
+    body.append("title", title.trim() || "Untitled Draft");
+    body.append("status", "draft");
+    if (content.trim()) body.append("content", content.trim());
+    if (excerpt.trim()) body.append("excerpt", excerpt.trim());
+    if (videoUrl.trim()) body.append("videoUrl", videoUrl.trim());
+    if (tags.trim()) {
+      const tagArray = tags.split(",").map((t) => t.trim()).filter(Boolean);
+      tagArray.forEach((t) => body.append("tags", t));
+    }
+    if (coverImage) body.append("coverImage", coverImage);
+
+    try {
+      const res = await apiFetch("/posts", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Draft saved successfully!");
+        return true;
+      } else {
+        toast.error(data.message || "Failed to save draft");
+        return false;
+      }
+    } catch {
+      toast.error("Failed to save draft");
+      return false;
+    }
+  };
+
+  const { confirmDialogProps } = useUnsavedChanges({
+    isDirty,
+    onSaveDraft: handleSaveDraft,
+  });
 
   const handleImageFile = (file) => {
     if (!file) return;
@@ -363,6 +408,7 @@ export default function CreatePost() {
           </div>
         </div>
       </div>
+      <ConfirmDialog {...confirmDialogProps} />
     </div>
   );
 }

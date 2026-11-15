@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
+import { NavigationGuardProvider } from "./context/NavigationGuardContext";
 import Layout from "./components/Layout";
 import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
@@ -55,7 +56,9 @@ export default function App() {
         <BrowserRouter>
             <AuthProvider>
                 <ToastProvider>
-                    <AppRoutes />
+                    <NavigationGuardProvider>
+                        <AppRoutes />
+                    </NavigationGuardProvider>
                 </ToastProvider>
             </AuthProvider>
         </BrowserRouter>

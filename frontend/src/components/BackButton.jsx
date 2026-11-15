@@ -1,20 +1,28 @@
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useNavigationGuard } from "../context/NavigationGuardContext";
 import "./BackButton.css";
 
 export default function BackButton({ to, label = "Back", className = "" }) {
   const navigate = useNavigate();
-  const location = useLocation();
+  const { triggerGuard } = useNavigationGuard();
 
   const handleClick = () => {
+    // Check if dirty form or unsaved changes guard blocks navigation
+    if (triggerGuard && triggerGuard()) {
+      return;
+    }
+
     if (to) {
       navigate(to);
       return;
     }
-    // Check if user arrived via direct link (new tab / initial history entry)
-    if (location.key === "default" || window.history.length <= 1) {
-      navigate("/");
-    } else {
+
+    // Check if user arrived via inside the app or direct link
+    const hasInAppHistory = typeof window !== "undefined" && window.history.state?.idx > 0;
+    if (hasInAppHistory) {
       navigate(-1);
+    } else {
+      navigate("/");
     }
   };
 

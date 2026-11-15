@@ -13,6 +13,7 @@ export default function ConfirmDialog({
   onClose,
   loading = false,
   danger = true,
+  actions = null,
 }) {
   const dialogRef = useRef(null);
   const confirmBtnRef = useRef(null);
@@ -103,29 +104,51 @@ export default function ConfirmDialog({
           </div>
         </div>
 
-        <div className="confirm-dialog-actions">
-          <button
-            type="button"
-            className="confirm-btn-cancel"
-            onClick={onClose}
-            disabled={loading}
-          >
-            {cancelText}
-          </button>
-          <button
-            ref={confirmBtnRef}
-            type="button"
-            className={`confirm-btn-action ${danger ? "confirm-btn-danger" : "confirm-btn-primary"}`}
-            onClick={onConfirm}
-            disabled={loading}
-          >
-            {loading ? (
-              <span className="confirm-btn-spinner" />
-            ) : (
-              confirmText
-            )}
-          </button>
-        </div>
+        {actions && Array.isArray(actions) && actions.length > 0 ? (
+          <div className="confirm-dialog-actions confirm-dialog-actions-multi">
+            {actions.map((act, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className={
+                  act.variant === "primary"
+                    ? "confirm-btn-action confirm-btn-primary"
+                    : act.variant === "danger"
+                    ? "confirm-btn-action confirm-btn-danger"
+                    : "confirm-btn-cancel"
+                }
+                onClick={act.onClick}
+                disabled={act.disabled || act.loading || loading}
+              >
+                {act.loading ? <span className="confirm-btn-spinner" /> : act.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="confirm-dialog-actions">
+            <button
+              type="button"
+              className="confirm-btn-cancel"
+              onClick={onClose}
+              disabled={loading}
+            >
+              {cancelText}
+            </button>
+            <button
+              ref={confirmBtnRef}
+              type="button"
+              className={`confirm-btn-action ${danger ? "confirm-btn-danger" : "confirm-btn-primary"}`}
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <span className="confirm-btn-spinner" />
+              ) : (
+                confirmText
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
