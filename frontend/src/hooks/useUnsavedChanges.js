@@ -15,7 +15,10 @@ export function useUnsavedChanges({ isDirty, onSaveDraft }) {
   const [savingDraft, setSavingDraft] = useState(false);
 
   const isDirtyRef = useRef(isDirty);
-  isDirtyRef.current = isDirty;
+
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   const performBack = useCallback(() => {
     const hasInAppHistory = typeof window !== "undefined" && window.history.state?.idx > 0;

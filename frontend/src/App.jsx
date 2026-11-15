@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { NavigationGuardProvider } from "./context/NavigationGuardContext";
 import Layout from "./components/Layout";
+import AuthLayout from "./components/Auth/AuthLayout";
 import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
 import PostDetails from "./components/Posts/PostDetails";
@@ -29,11 +30,16 @@ const ProtectedRoute = ({ children }) => {
 function AppRoutes() {
     return (
         <Routes>
+            {/* Standalone Auth Routes: No main app chrome (no sidebar, no header, no bottom bar) */}
+            <Route element={<AuthLayout />}>
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+            </Route>
+
+            {/* Main Application Routes */}
             <Route element={<Layout />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/explore" element={<Explore />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
                 <Route path="/profile/:id" element={<Profile />} />
                 <Route path="/profile/:id/:relation" element={<Connections />} />
                 <Route path="/posts/:id" element={<PostDetails />} />

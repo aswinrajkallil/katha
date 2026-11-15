@@ -18,12 +18,25 @@ const setRefreshCookie = (res, token) => res.cookie("refreshToken", token, {
     sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/"
 });
 
+const checkUsername = async (req, res) => {
+    try {
+        const username = typeof req.query.username === "string" ? req.query.username.trim().toLowerCase() : "";
+        if (!/^[a-z0-9_.]{3,30}$/.test(username)) {
+            return res.status(400).json({ success: false, available: false, message: "Username must be 3–30 characters using letters, numbers, underscores or dots" });
+        }
+        const exists = await User.findOne({ username }).select("_id");
+        return res.json({ success: true, available: !exists });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: "Check failed" });
+    }
+};
+
 const register = async (req, res) => {
     try {
         const username = typeof req.body.username === "string" ? req.body.username.trim().toLowerCase() : "";
         const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
         const password = req.body.password;
-        if (!/^[a-z0-9_]{3,30}$/.test(username)) return res.status(400).json({ success: false, message: "Username must be 3–30 characters using letters, numbers or underscores" });
+        if (!/^[a-z0-9_.]{3,30}$/.test(username)) return res.status(400).json({ success: false, message: "Username must be 3–30 characters using letters, numbers, underscores or dots" });
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: "Enter a valid email address" });
         if (typeof password !== "string" || password.length < 8 || password.length > 128) return res.status(400).json({ success: false, message: "Password must be between 8 and 128 characters" });
         const exists = await User.findOne({ $or: [{ email }, { username }] }).select("_id");
@@ -111,4 +124,4 @@ const getMe = async (req, res) => {
     }
 };
 
-export { register, login, refreshAccessToken, logout, getMe };
+export { register, login, refreshAccessToken, logout, getMe, checkUsername };
