@@ -14,10 +14,9 @@ const fileFilter = (req, file, cb) => {
     if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(
-            new Error("Only JPEG, PNG, GIF and WebP images are allowed"),
-            false
-        );
+        const error = new Error("Only JPEG, PNG, GIF and WebP images are allowed");
+        error.code = "INVALID_FILE_TYPE";
+        cb(error, false);
     }
 };
 

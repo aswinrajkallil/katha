@@ -67,15 +67,28 @@ app.get("/", (req, res) => res.json({ success: true, message: "Kathā API is run
 
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
+        console.error("Multer error:", err);
         const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
-        return res.status(status).json({ success: false, message: err.message });
+        const message = err.code === "LIMIT_FILE_SIZE"
+            ? "File size exceeds the 5MB limit"
+            : (err.message || "File upload error");
+        return res.status(status).json({ success: false, message, errorType: err.code });
     }
-    if (err && err.message === "Only image files (jpeg, jpg, png, gif, webp) are allowed") {
-        return res.status(400).json({ success: false, message: err.message });
+    if (err && (err.code === "INVALID_FILE_TYPE" || /images? are allowed/i.test(err.message))) {
+        console.error("File filter error:", err);
+        return res.status(400).json({ success: false, message: err.message, errorType: "INVALID_FILE_TYPE" });
+    }
+    if (err && (err.code === "CLOUDINARY_CONFIG_MISSING" || err.code === "STORAGE_ERROR" || err.http_code)) {
+        console.error("Cloudinary / Storage error:", err);
+        return res.status(502).json({
+            success: false,
+            message: err.message || "Failed to upload image to cloud storage",
+            errorType: "STORAGE_ERROR"
+        });
     }
     if (err) {
         console.error("Unhandled request error:", err);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+        return res.status(500).json({ success: false, message: err.message || "Internal server error" });
     }
     next();
 });

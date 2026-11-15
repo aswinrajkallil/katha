@@ -27,15 +27,15 @@ export default function EditProfile() {
             Object.entries(form).forEach(([key, value]) => body.append(key, value));
             if (image) body.append("profileImage", image);
             const res = await apiFetch("/users/profile", { method: "PUT", body });
-            const data = await res.json();
-            if (!res.ok || !data.success) throw new Error(data.message || "Unable to update profile");
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) throw new Error(data.message || `Unable to update profile (${res.status})`);
             updateUser(data.data);
             if (cover) {
                 const coverBody = new FormData();
                 coverBody.append("coverImage", cover);
                 const coverRes = await apiFetch("/users/profile/cover", { method: "PUT", body: coverBody });
-                const coverData = await coverRes.json();
-                if (!coverRes.ok || !coverData.success) throw new Error(coverData.message || "Profile saved, but cover image upload failed");
+                const coverData = await coverRes.json().catch(() => ({}));
+                if (!coverRes.ok || !coverData.success) throw new Error(coverData.message || `Profile saved, but cover image upload failed (${coverRes.status})`);
                 updateUser(coverData.data);
             }
             navigate(`/profile/${data.data.username}`);
