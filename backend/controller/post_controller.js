@@ -131,6 +131,14 @@ const buildPostFilters = async (filters, baseQuery = {}) => {
 
     if (type && ["blog", "video"].includes(type)) query.type = type;
 
+    if (author && isValidId(author)) {
+        query.author = author;
+    }
+
+    if (hasVideo === "true" || hasVideo === true) {
+        query.videoUrl = { $exists: true, $ne: "" };
+    }
+
     if (tags) {
         const tagList = (Array.isArray(tags) ? tags : String(tags).split(","))
             .map(tag => tag.trim()).filter(Boolean).slice(0, 10);
@@ -174,6 +182,22 @@ const getPosts = async (req, res) => {
                 Like.aggregate([
                     { $group: { _id: "$post", likesCount: { $sum: 1 } } },
                     { $sort: { likesCount: -1 } }
+                ]),
+                Post.find(query).populate("author", "username profileImage")
+                    .populate("category", "name slug").lean()
+            ]);
+            const rank = new Map(ranked.map((item, index) => [item._id.toString(), index]));
+            matchingPosts.sort((a, b) =>
+                (rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER) -
+                (rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER)
+            );
+            posts = matchingPosts.slice(skip, skip + limitNum);
+        } else if (req.query.sort === "mostCommented") {
+            const [ranked, matchingPosts] = await Promise.all([
+                Comment.aggregate([
+                    { $match: { isDeleted: { $ne: true } } },
+                    { $group: { _id: "$post", count: { $sum: 1 } } },
+                    { $sort: { count: -1 } }
                 ]),
                 Post.find(query).populate("author", "username profileImage")
                     .populate("category", "name slug").lean()

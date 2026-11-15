@@ -1,11 +1,9 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
   Video,
   ArrowUp,
-  ChevronLeft,
-  ChevronRight,
   X,
   Compass,
   RefreshCw,
@@ -19,6 +17,7 @@ import apiFetch from "../api/api";
 import PostCard from "../components/Posts/PostCard";
 import UserAvatar from "../components/UserAvatar";
 import ConfirmDialog from "../components/ConfirmDialog";
+import HorizontalScroller from "../components/HorizontalScroller";
 import "./FollowingFeed.css";
 
 export default function FollowingFeed() {
@@ -52,9 +51,6 @@ export default function FollowingFeed() {
   const [seeAllOpen, setSeeAllOpen] = useState(false);
   const [unfollowTarget, setUnfollowTarget] = useState(null);
   const [unfollowLoading, setUnfollowLoading] = useState(false);
-
-  // Strip Scroll Ref
-  const stripScrollRef = useRef(null);
 
   // LocalStorage Last-Visit for stories ring/dot
   const storageKey = `katha_following_last_visit_${user?._id || user?.id || "guest"}`;
@@ -187,14 +183,6 @@ export default function FollowingFeed() {
     fetchFeed(page + 1, true);
   };
 
-  // Scroll Strip
-  const handleScrollStrip = (dir) => {
-    if (stripScrollRef.current) {
-      const scrollAmount = dir === "left" ? -240 : 240;
-      stripScrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
-    }
-  };
-
   // Follow a suggested user
   const handleFollowUser = async (targetUser) => {
     const targetId = targetUser._id || targetUser.id;
@@ -248,32 +236,13 @@ export default function FollowingFeed() {
     }
   };
 
-  // Dynamic Subtitle text
-  const getHeaderSubtitle = () => {
-    if (followingCount === null) return "Stories from people you follow";
-    if (followingCount === 0) return "Stories from people you follow";
-    if (followingCount === 1) return "Latest from 1 person you follow";
-    return `Latest from ${followingCount} people you follow`;
-  };
-
   return (
     <main className="following-feed-container">
-      {/* 1. Compact Header Section */}
-      <section className="following-header-card" aria-label="Following feed header">
-        <div className="following-icon-tile">
-          <Users size={22} />
-        </div>
-        <div className="following-header-info">
-          <h1 className="following-header-title">Following</h1>
-          <p className="following-header-subtitle">{getHeaderSubtitle()}</p>
-        </div>
-      </section>
-
-      {/* 2. "People you follow" Strip */}
+      {/* 1. "People you follow" Strip (floating, no card container) */}
       {people.length > 0 && (
         <section className="following-people-section" aria-label="People you follow">
           <div className="following-people-header">
-            <h2 className="following-people-heading">People you follow</h2>
+            <h2 className="following-people-heading">PEOPLE YOU FOLLOW</h2>
             <button
               type="button"
               className="following-see-all-btn"
@@ -283,99 +252,79 @@ export default function FollowingFeed() {
             </button>
           </div>
 
-          <div className="following-strip-wrapper">
+          <HorizontalScroller gap={14} scrollStep={240} ariaLabel="People you follow">
+            {/* "All" item to clear filter */}
             <button
               type="button"
-              className="following-scroll-arrow left"
-              onClick={() => handleScrollStrip("left")}
-              aria-label="Scroll left"
+              className={`following-person-item ${!selectedAuthor ? "selected" : ""}`}
+              onClick={() => setSelectedAuthor(null)}
+              title="All followed stories"
             >
-              <ChevronLeft size={18} />
-            </button>
-
-            <div className="following-strip-scroll" ref={stripScrollRef}>
-              {/* "All" item to clear filter */}
-              <button
-                type="button"
-                className={`following-person-item ${!selectedAuthor ? "selected" : ""}`}
-                onClick={() => setSelectedAuthor(null)}
-                title="All followed stories"
+              <div
+                className={`following-avatar-ring-wrap ${
+                  !selectedAuthor ? "active-filter" : ""
+                }`}
               >
                 <div
-                  className={`following-avatar-ring-wrap ${
-                    !selectedAuthor ? "active-filter" : ""
-                  }`}
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: "50%",
+                    background: !selectedAuthor ? "#ffedd5" : "#f3f4f6",
+                    color: !selectedAuthor ? "#e8590c" : "#6b7280",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  All
+                </div>
+              </div>
+              <span className="following-person-name">All Stories</span>
+            </button>
+
+            {/* People Cards */}
+            {people.map((person) => {
+              const hasNewPost =
+                person.latestPostAt &&
+                new Date(person.latestPostAt).getTime() > lastVisitTime;
+              const isSelected = selectedAuthor?._id === person._id;
+
+              return (
+                <div
+                  key={person._id}
+                  className={`following-person-item ${isSelected ? "selected" : ""}`}
+                  onClick={() => {
+                    if (person.username) {
+                      navigate(`/profile/${person.username}`);
+                    } else {
+                      setSelectedAuthor(person);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      navigate(`/profile/${person.username}`);
+                    }
+                  }}
+                  title={`View @${person.username}'s profile`}
                 >
                   <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: "50%",
-                      background: !selectedAuthor ? "#ffedd5" : "#f3f4f6",
-                      color: !selectedAuthor ? "#e8590c" : "#6b7280",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 700,
-                      fontSize: "0.85rem",
-                    }}
+                    className={`following-avatar-ring-wrap ${
+                      hasNewPost ? "has-new" : ""
+                    } ${isSelected ? "active-filter" : ""}`}
                   >
-                    All
+                    <UserAvatar user={person} size={48} />
+                    {hasNewPost && <span className="following-new-dot" />}
                   </div>
+                  <span className="following-person-name">@{person.username}</span>
                 </div>
-                <span className="following-person-name">All Stories</span>
-              </button>
-
-              {/* People Cards */}
-              {people.map((person) => {
-                const hasNewPost =
-                  person.latestPostAt &&
-                  new Date(person.latestPostAt).getTime() > lastVisitTime;
-                const isSelected = selectedAuthor?._id === person._id;
-
-                return (
-                  <div
-                    key={person._id}
-                    className={`following-person-item ${isSelected ? "selected" : ""}`}
-                    onClick={() => {
-                      if (person.username) {
-                        navigate(`/profile/${person.username}`);
-                      } else {
-                        setSelectedAuthor(person);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        navigate(`/profile/${person.username}`);
-                      }
-                    }}
-                    title={`View @${person.username}'s profile`}
-                  >
-                    <div
-                      className={`following-avatar-ring-wrap ${
-                        hasNewPost ? "has-new" : ""
-                      } ${isSelected ? "active-filter" : ""}`}
-                    >
-                      <UserAvatar user={person} size={48} />
-                      {hasNewPost && <span className="following-new-dot" />}
-                    </div>
-                    <span className="following-person-name">@{person.username}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              className="following-scroll-arrow right"
-              onClick={() => handleScrollStrip("right")}
-              aria-label="Scroll right"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
+              );
+            })}
+          </HorizontalScroller>
         </section>
       )}
 
