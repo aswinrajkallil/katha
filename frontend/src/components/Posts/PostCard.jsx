@@ -36,7 +36,7 @@ const getRelativeTime = (dateStr) => {
   return `${diffYr}y ago`;
 };
 
-export default function PostCard({ post, onDelete, isPreview = false }) {
+export default function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = false }) {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -173,6 +173,9 @@ export default function PostCard({ post, onDelete, isPreview = false }) {
             >
               <UserAvatar user={post.author} size={22} className="reddit-author-avatar" />
               <span className="reddit-author-name">@{authorUsername}</span>
+              {showFollowingBadge && (
+                <span className="reddit-following-pill">Following</span>
+              )}
             </Link>
 
             <span className="reddit-meta-dot">•</span>

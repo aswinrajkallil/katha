@@ -81,6 +81,21 @@
   letter-spacing: -0.01em;
 }
 
+.reddit-following-pill {
+  font-size: 0.685rem;
+  font-weight: 600;
+  color: #e8590c;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 4px;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
 .reddit-meta-dot {
   color: #9ca3af;
   font-size: 0.8rem;

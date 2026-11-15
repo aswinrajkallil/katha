@@ -114,4 +114,40 @@ const getUserPosts = async (req, res) => {
     }
 };
 
-export { getUserProfile, getMyProfile, updateProfile, updateCoverImage, getUserPosts };
+const getSuggestedUsers = async (req, res) => {
+    try {
+        const follows = await Follow.find({ follower: req.user.id }).select("following").lean();
+        const excludeIds = [req.user.id, ...follows.map(f => f.following)];
+        const limit = Math.min(20, Math.max(1, Number.parseInt(req.query.limit, 10) || 6));
+
+        const users = await User.find({ _id: { $nin: excludeIds } })
+            .select("username fullName profileImage bio")
+            .limit(limit)
+            .lean();
+
+        if (!users.length) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const userIds = users.map(u => u._id);
+        const postCounts = await Post.aggregate([
+            { $match: { author: { $in: userIds }, status: "published" } },
+            { $group: { _id: "$author", count: { $sum: 1 } } }
+        ]);
+
+        const countMap = new Map(postCounts.map(item => [item._id.toString(), item.count]));
+        const suggested = users.map(u => ({
+            ...u,
+            postCount: countMap.get(u._id.toString()) || 0
+        }));
+
+        suggested.sort((a, b) => b.postCount - a.postCount);
+
+        return res.json({ success: true, data: suggested });
+    } catch (error) {
+        console.error("getSuggestedUsers:", error);
+        return res.status(500).json({ success: false, message: "Unable to load suggested users" });
+    }
+};
+
+export { getUserProfile, getMyProfile, updateProfile, updateCoverImage, getUserPosts, getSuggestedUsers };
