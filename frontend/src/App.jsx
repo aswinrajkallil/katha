@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
 import Layout from "./components/Layout";
 import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
@@ -35,6 +36,7 @@ function AppRoutes() {
                 <Route path="/profile/:id" element={<Profile />} />
                 <Route path="/profile/:id/:relation" element={<Connections />} />
                 <Route path="/posts/:id" element={<PostDetails />} />
+                <Route path="/post/:id" element={<PostDetails />} />
                 <Route path="/posts/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
                 <Route path="/posts/:id/edit" element={<ProtectedRoute><EditPost /></ProtectedRoute>} />
                 <Route path="/my-posts" element={<ProtectedRoute><MyPosts /></ProtectedRoute>} />
@@ -49,5 +51,13 @@ function AppRoutes() {
 }
 
 export default function App() {
-    return <BrowserRouter><AuthProvider><AppRoutes /></AuthProvider></BrowserRouter>;
+    return (
+        <BrowserRouter>
+            <AuthProvider>
+                <ToastProvider>
+                    <AppRoutes />
+                </ToastProvider>
+            </AuthProvider>
+        </BrowserRouter>
+    );
 }

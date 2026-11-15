@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import apiFetch from "../../api/api";
 import PostList from "../Posts/PostList";
 import BackButton from "../BackButton";
+import ConfirmDialog from "../ConfirmDialog";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -98,47 +99,15 @@ export default function Profile() {
         <PostList authorId={profile.username || profile._id} />
 
         {/* ---- Logout confirmation dialog ---- */}
-        {showLogoutDialog && (
-            <div
-                style={{
-                    position: "fixed", inset: 0, zIndex: 9999,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    background: "rgba(0,0,0,0.4)",
-                }}
-                onClick={() => setShowLogoutDialog(false)}
-            >
-                <div
-                    style={{
-                        background: "#fff", borderRadius: 12, padding: "28px 32px",
-                        width: 340, maxWidth: "90vw",
-                        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="logout-title"
-                >
-                    <h3 id="logout-title" style={{ margin: "0 0 16px", fontSize: "1.05rem" }}>
-                        Are you sure you want to log out?
-                    </h3>
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                        <button
-                            onClick={() => setShowLogoutDialog(false)}
-                            style={{
-                                background: "#e5e7eb", color: "#374151",
-                                border: "none", borderRadius: 6,
-                                padding: "0.45rem 1rem", cursor: "pointer",
-                                fontSize: "0.875rem", fontWeight: 500,
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button className="btn-danger" onClick={handleLogout}>
-                            Log out
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
+        <ConfirmDialog
+            isOpen={showLogoutDialog}
+            title="Log out of Kathā?"
+            message="Are you sure you want to log out of your account?"
+            confirmText="Log out"
+            cancelText="Cancel"
+            danger={true}
+            onConfirm={handleLogout}
+            onClose={() => setShowLogoutDialog(false)}
+        />
     </main>;
 }

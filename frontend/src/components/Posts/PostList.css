@@ -1,5 +1,5 @@
 /* =========================================
-   POST LIST & SEARCH STATUS BAR
+   POST LIST & SEARCH STATUS BAR & SKELETONS
 ========================================= */
 
 .post-list-container {
@@ -15,7 +15,7 @@
   border: 1px solid var(--color-border, #e8eaed);
   border-radius: 8px;
   padding: 8px 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .post-search-status-text {
@@ -41,11 +41,6 @@
   color: var(--color-primary-dark, #c94a06);
 }
 
-.post-list-status {
-  padding: 16px 0;
-  color: var(--color-text-secondary, #70757a);
-}
-
 .post-list-error {
   padding: 16px;
   color: #dc2626;
@@ -54,26 +49,130 @@
   margin-bottom: 16px;
 }
 
-.post-list-empty {
-  text-align: center;
-  padding: 48px 16px;
-  background-color: #ffffff;
-  border: 1px dashed var(--color-border, #e8eaed);
-  border-radius: 12px;
-  margin: 16px 0;
+/* Skeleton Loaders */
+.post-skeletons-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.post-list-empty-title {
-  color: var(--color-text-secondary, #70757a);
-  font-size: 1rem;
-  margin-bottom: 12px;
+.post-skeleton-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #e8eaed;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f0f2f5 25%, #e6e8ec 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmerAnimation 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmerAnimation {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.skeleton-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.skeleton-meta {
+  width: 140px;
+  height: 14px;
+}
+
+.skeleton-title {
+  width: 75%;
+  height: 20px;
+  margin-bottom: 10px;
+}
+
+.skeleton-text {
+  width: 90%;
+  height: 14px;
+  margin-bottom: 14px;
+}
+
+.skeleton-media {
+  width: 100%;
+  height: 220px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.skeleton-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.skeleton-pill {
+  width: 72px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+/* Empty State */
+.post-list-empty {
+  text-align: center;
+  padding: 56px 20px;
+  background-color: #ffffff;
+  border: 1px dashed var(--color-border, #e8eaed);
+  border-radius: 16px;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.post-empty-icon-wrap {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #fff7ed;
+  color: #e8590c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.post-empty-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 6px 0;
+}
+
+.post-list-empty-subtitle {
+  color: #6b7280;
+  font-size: 0.925rem;
+  margin: 0 0 16px 0;
+  max-width: 380px;
+  line-height: 1.5;
 }
 
 .post-list-empty-clear-btn {
   background-color: var(--color-primary, #e8590c);
   color: #ffffff;
   border: none;
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: 999px;
   font-size: 0.875rem;
   font-weight: 600;
@@ -95,16 +194,27 @@
 }
 
 .post-list-pagination button {
-  padding: 6px 14px;
-  border-radius: 6px;
+  padding: 7px 16px;
+  border-radius: 8px;
   background-color: var(--color-hover, #f3f4f6);
-  color: var(--color-text-primary, #202124);
   border: 1px solid var(--color-border, #e8eaed);
+  color: var(--color-text-primary, #202124);
   font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.post-list-pagination button:hover:not(:disabled) {
+  background-color: #e5e7eb;
 }
 
 .post-list-pagination button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.post-list-pagination span {
+  font-size: 0.875rem;
+  color: #70757a;
 }

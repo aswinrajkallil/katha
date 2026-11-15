@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import apiFetch from "../../api/api";
+import logoFull from "../../assets/katha-logo-full.svg";
 
 const Login = () => {
     const [formData, setFormData] = useState({ email: "", password: "" });
@@ -53,6 +54,11 @@ const Login = () => {
 
     return (
         <div style={{ maxWidth: 400, margin: "60px auto", padding: 24 }}>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <Link to="/">
+                    <img src={logoFull} alt="Kathā" style={{ height: 40, width: "auto" }} />
+                </Link>
+            </div>
             <h2>Login to Kathā</h2>
             <form onSubmit={handleSubmit}>
                 <div style={{ marginBottom: 12 }}>

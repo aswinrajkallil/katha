@@ -1,8 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import { Sparkles, SearchX, PlusCircle } from "lucide-react";
 import PostCard from "./PostCard";
 import apiFetch from "../../api/api";
 import "./PostList.css";
+
+const PostSkeleton = () => (
+  <div className="post-skeleton-card" aria-hidden="true">
+    <div className="skeleton-header">
+      <div className="skeleton-avatar skeleton-shimmer" />
+      <div className="skeleton-meta skeleton-shimmer" />
+    </div>
+    <div className="skeleton-title skeleton-shimmer" />
+    <div className="skeleton-text skeleton-shimmer" />
+    <div className="skeleton-media skeleton-shimmer" />
+    <div className="skeleton-actions">
+      <div className="skeleton-pill skeleton-shimmer" />
+      <div className="skeleton-pill skeleton-shimmer" />
+      <div className="skeleton-pill skeleton-shimmer" />
+    </div>
+  </div>
+);
 
 const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -108,31 +126,55 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
                 </div>
             )}
 
-            {loading && <p className="post-list-status">Loading posts...</p>}
             {error && <p role="alert" className="post-list-error">{error}</p>}
 
+            {/* Skeleton Loaders while loading */}
+            {loading && (
+                <div className="post-skeletons-group">
+                    <PostSkeleton />
+                    <PostSkeleton />
+                    <PostSkeleton />
+                </div>
+            )}
+
+            {/* Empty State */}
             {!loading && !error && posts.length === 0 && (
                 <div className="post-list-empty">
-                    <p className="post-list-empty-title">
+                    <div className="post-empty-icon-wrap">
+                        {hasActiveFilters ? <SearchX size={32} /> : <Sparkles size={32} />}
+                    </div>
+                    <h3 className="post-empty-title">
                         {myPosts
-                            ? "You haven't created any posts yet."
+                            ? "You haven't created any posts yet"
                             : hasActiveFilters
-                            ? "No posts match your search or filters."
-                            : "No stories have been published yet."}
+                            ? "No matching posts found"
+                            : "No stories published yet"}
+                    </h3>
+                    <p className="post-list-empty-subtitle">
+                        {myPosts
+                            ? "Share your stories, videos, and thoughts with the Kathā community."
+                            : hasActiveFilters
+                            ? "Try adjusting your search terms or resetting the active filters."
+                            : "Be the first to share a story or video with Kathā."}
                     </p>
-                    {hasActiveFilters && (
+                    {hasActiveFilters ? (
                         <button
                             type="button"
                             onClick={handleClearSearch}
                             className="post-list-empty-clear-btn"
                         >
-                            Clear search & filters
+                            Reset filters
                         </button>
+                    ) : (
+                        <Link to="/posts/create" className="btn-primary" style={{ marginTop: 8 }}>
+                            <PlusCircle size={16} /> Write a Story
+                        </Link>
                     )}
                 </div>
             )}
 
-            {posts.map(post => (
+            {/* Posts Feed */}
+            {!loading && posts.map(post => (
                 <PostCard
                     key={post._id}
                     post={post}
@@ -140,7 +182,8 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
                 />
             ))}
 
-            {pagination && pagination.totalPages > 1 && (
+            {/* Pagination */}
+            {!loading && pagination && pagination.totalPages > 1 && (
                 <div className="post-list-pagination">
                     <button
                         disabled={page <= 1 || loading}

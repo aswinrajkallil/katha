@@ -23,8 +23,7 @@ const postSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["blog", "video"],
-            required: [true, "Post type is required"]
+            default: "blog"
         },
         coverImage: {
             type: String,

@@ -7,46 +7,48 @@ import Bookmark from "../models/Bookmark.js";
 // Helper: validate ObjectId
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
+// Helper: attach real comment counts to an array of posts
+const attachCommentCounts = async (posts) => {
+    if (!posts || !posts.length) return [];
+    const postIds = posts.map(p => p._id);
+    const counts = await Comment.aggregate([
+        { $match: { post: { $in: postIds } } },
+        { $group: { _id: "$post", count: { $sum: 1 } } }
+    ]);
+    const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
+    return posts.map(p => {
+        const obj = typeof p.toObject === "function" ? p.toObject() : { ...p };
+        return {
+            ...obj,
+            commentsCount: countMap.get(obj._id.toString()) || 0
+        };
+    });
+};
+
 // POST /api/posts — Create a post
 const createPost = async (req, res) => {
     try {
         const { title, content, excerpt, type, videoUrl, tags, status, category } =
             req.body;
 
-        if (!title || !type) {
+        if (!title || !title.trim()) {
             return res.status(400).json({
                 success: false,
-                message: "Title and type are required"
+                message: "Title is required"
             });
         }
 
-        if (!["blog", "video"].includes(type)) {
-            return res.status(400).json({
-                success: false,
-                message: "Post type must be 'blog' or 'video'"
-            });
-        }
-
-        if (type === "blog" && !content) {
-            return res.status(400).json({
-                success: false,
-                message: "Content is required for blog posts"
-            });
-        }
-
-        if (type === "video" && !videoUrl) {
-            return res.status(400).json({
-                success: false,
-                message: "Video URL is required for video posts"
-            });
-        }
+        // Determine post type gracefully: if explicit type provided, use it; else if videoUrl present, mark as video; else default to blog
+        const resolvedType = (type && ["blog", "video"].includes(type))
+            ? type
+            : (videoUrl ? "video" : "blog");
 
         const postData = {
-            title,
+            title: title.trim(),
             content: content || null,
             excerpt: excerpt || null,
-            type,
-            videoUrl: videoUrl || null,
+            type: resolvedType,
+            videoUrl: videoUrl ? videoUrl.trim() : null,
             // Normalize tags to an array of strings
             tags: (() => {
                 if (!tags) return [];
@@ -187,11 +189,13 @@ const getPosts = async (req, res) => {
                 .populate("category", "name slug").sort(sort).skip(skip).limit(limitNum);
         }
 
+        const postsWithCounts = await attachCommentCounts(posts);
+
         return res.status(200).json({
             success: true,
             message: "Posts fetched successfully",
             data: {
-                posts,
+                posts: postsWithCounts,
                 pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) }
             }
         });
@@ -225,11 +229,13 @@ const getMyPosts = async (req, res) => {
             Post.countDocuments(query)
         ]);
 
+        const postsWithCounts = await attachCommentCounts(posts);
+
         return res.status(200).json({
             success: true,
             message: "Your posts fetched successfully",
             data: {
-                posts,
+                posts: postsWithCounts,
                 pagination: {
                     total,
                     page: pageNum,
@@ -273,11 +279,13 @@ const getUserPosts = async (req, res) => {
             Post.countDocuments(query)
         ]);
 
+        const postsWithCounts = await attachCommentCounts(posts);
+
         return res.status(200).json({
             success: true,
             message: "User posts fetched",
             data: {
-                posts,
+                posts: postsWithCounts,
                 pagination: {
                     total,
                     page: pageNum,
@@ -325,11 +333,15 @@ const getPostBySlug = async (req, res) => {
 
         // Increment view count
         await Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } });
+        const commentsCount = await Comment.countDocuments({ post: post._id });
 
         return res.status(200).json({
             success: true,
             message: "Post fetched",
-            data: post
+            data: {
+                ...post.toObject(),
+                commentsCount
+            }
         });
     } catch (e) {
         console.error("getPostBySlug error:", e);
@@ -373,11 +385,15 @@ const getPostById = async (req, res) => {
         }
 
         await Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } });
+        const commentsCount = await Comment.countDocuments({ post: post._id });
 
         return res.status(200).json({
             success: true,
             message: "Post fetched",
-            data: post
+            data: {
+                ...post.toObject(),
+                commentsCount
+            }
         });
     } catch (e) {
         console.error("getPostById error:", e);
