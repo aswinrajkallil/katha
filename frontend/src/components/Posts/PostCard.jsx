@@ -15,6 +15,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import apiFetch from "../../api/api";
 import ConfirmDialog from "../ConfirmDialog";
+import UserAvatar from "../UserAvatar";
 import "./PostCard.css";
 
 const getRelativeTime = (dateStr) => {
@@ -54,7 +55,6 @@ export default function PostCard({ post, onDelete, isPreview = false }) {
 
   const isVideo = Boolean(post.videoUrl || post.type === "video");
   const authorUsername = post.author?.username || "anonymous";
-  const authorInitial = authorUsername[0]?.toUpperCase() || "K";
 
   // Resolve cover image URL (handles local upload path, external URL, or blob/preview)
   let imageUrl = null;
@@ -171,19 +171,7 @@ export default function PostCard({ post, onDelete, isPreview = false }) {
               className="reddit-author-chip"
               aria-label={`View profile of @${authorUsername}`}
             >
-              {post.author?.profileImage ? (
-                <img
-                  src={
-                    post.author.profileImage.startsWith("http")
-                      ? post.author.profileImage
-                      : `${import.meta.env.VITE_API_URL}${post.author.profileImage}`
-                  }
-                  alt={authorUsername}
-                  className="reddit-author-avatar"
-                />
-              ) : (
-                <span className="reddit-author-avatar-fallback">{authorInitial}</span>
-              )}
+              <UserAvatar user={post.author} size={22} className="reddit-author-avatar" />
               <span className="reddit-author-name">@{authorUsername}</span>
             </Link>
 

@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Heart,
   Bookmark,
   Share2,
   Eye,
-  MessageCircle,
   Pencil,
   Trash2,
   Video as VideoIcon,
@@ -18,6 +17,7 @@ import CommentList from "../Comments/CommentList";
 import CommentForm from "../Comments/CommentForm";
 import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
+import UserAvatar from "../UserAvatar";
 import "./PostDetails.css";
 
 const getRelativeTime = (dateStr) => {
@@ -59,8 +59,25 @@ export default function PostDetails() {
   const [likeLoading, setLikeLoading] = useState(false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsSort, setCommentsSort] = useState("best");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const fetchComments = useCallback(async (sort = commentsSort) => {
+    setCommentsLoading(true);
+    try {
+      const res = await apiFetch(`/posts/${id}/comments?sort=${sort}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setComments(data.data || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [id, commentsSort]);
 
   useEffect(() => {
     let active = true;
@@ -93,16 +110,6 @@ export default function PostDetails() {
       }
     };
 
-    const fetchComments = async () => {
-      try {
-        const res = await apiFetch(`/posts/${id}/comments`);
-        const data = await res.json();
-        if (active && data.success) setComments(data.data || []);
-      } catch {
-        // ignore
-      }
-    };
-
     fetchPost();
     fetchLikes();
     fetchComments();
@@ -110,7 +117,7 @@ export default function PostDetails() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, fetchComments]);
 
   useEffect(() => {
     let active = true;
@@ -217,29 +224,47 @@ export default function PostDetails() {
     }
   };
 
-  const handleCommentAdded = (newComment) => {
-    setComments((prev) => {
-      const parentId = newComment.parentComment?._id || newComment.parentComment;
-      if (!parentId) return [...prev, newComment];
-
-      return prev.map((comment) =>
-        comment._id === parentId
-          ? { ...comment, replies: [...(comment.replies || []), newComment] }
-          : comment
-      );
-    });
-    toast.success("Comment added");
+  const handleSortChange = (newSort) => {
+    setCommentsSort(newSort);
+    fetchComments(newSort);
   };
 
-  const handleCommentDeleted = (commentId) => {
+  const handleCommentAdded = (newComment) => {
+    setComments((prev) => {
+      if (prev.some((c) => c._id === newComment._id)) return prev;
+      return [newComment, ...prev];
+    });
+    setPost((prev) => (prev ? { ...prev, commentsCount: (prev.commentsCount || 0) + 1 } : prev));
+  };
+
+  const handleCommentUpdated = (updatedComment) => {
     setComments((prev) =>
-      prev
-        .filter((comment) => comment._id !== commentId)
-        .map((comment) => ({
-          ...comment,
-          replies: (comment.replies || []).filter((reply) => reply._id !== commentId),
-        }))
+      prev.map((c) => (c._id === updatedComment._id ? { ...c, ...updatedComment } : c))
     );
+  };
+
+  const handleCommentDeleted = (commentId, softDeleted) => {
+    if (softDeleted) {
+      setComments((prev) =>
+        prev.map((c) =>
+          c._id === commentId
+            ? {
+                ...c,
+                content: "[deleted]",
+                author: { _id: null, username: "[deleted]", fullName: "[deleted]", profileImage: null },
+                likesCount: 0,
+                likedByMe: false,
+                isDeleted: true,
+              }
+            : c
+        )
+      );
+    } else {
+      setComments((prev) => prev.filter((c) => c._id !== commentId));
+      setPost((prev) =>
+        prev ? { ...prev, commentsCount: Math.max(0, (prev.commentsCount || 0) - 1) } : prev
+      );
+    }
   };
 
   if (loading) {
@@ -271,7 +296,6 @@ export default function PostDetails() {
   const isAdmin = user && user.role === "admin";
   const canModify = isAuthor || isAdmin;
   const authorUsername = post.author?.username || "anonymous";
-  const authorInitial = authorUsername[0]?.toUpperCase() || "K";
 
   let imageUrl = null;
   if (post.coverImage) {
@@ -315,19 +339,7 @@ export default function PostDetails() {
             to={post.author?.username ? `/profile/${post.author.username}` : "#"}
             className="post-details-author-chip"
           >
-            {post.author?.profileImage ? (
-              <img
-                src={
-                  post.author.profileImage.startsWith("http")
-                    ? post.author.profileImage
-                    : `${import.meta.env.VITE_API_URL}${post.author.profileImage}`
-                }
-                alt={authorUsername}
-                className="post-details-avatar"
-              />
-            ) : (
-              <span className="post-details-avatar-fallback">{authorInitial}</span>
-            )}
+            <UserAvatar user={post.author} size={38} className="post-details-avatar" />
             <div className="post-details-author-info">
               <span className="post-details-author-name">@{authorUsername}</span>
               <span className="post-details-time">{getRelativeTime(post.createdAt)}</span>
@@ -443,30 +455,26 @@ export default function PostDetails() {
             <span>{post.views || 0} views</span>
           </div>
         </div>
-      </article>
 
-      {/* Comments Section */}
-      <section className="post-comments-card">
-        <h2 className="post-comments-heading">
-          <MessageCircle size={20} color="#e8590c" />
-          <span>{comments.length} Comments</span>
-        </h2>
+        {/* Thin divider before comments in continuous column */}
+        <hr className="post-details-divider" />
 
-        {user ? (
-          <CommentForm postId={id} onCommentAdded={handleCommentAdded} />
-        ) : (
-          <div className="post-login-prompt">
-            <Link to="/login">Log in</Link> or <Link to="/register">Sign up</Link> to join the conversation.
-          </div>
-        )}
+        {/* Comment input pill/box */}
+        <CommentForm postId={id} onCommentAdded={handleCommentAdded} />
 
+        {/* Comment tree with header & sorting */}
         <CommentList
           comments={comments}
           postId={id}
+          postAuthorId={post.author?._id || post.author?.id}
+          loading={commentsLoading}
+          sortBy={commentsSort}
+          onSortChange={handleSortChange}
           onCommentAdded={handleCommentAdded}
+          onCommentUpdated={handleCommentUpdated}
           onCommentDeleted={handleCommentDeleted}
         />
-      </section>
+      </article>
 
       {/* Delete Confirmation Modal */}
       <ConfirmDialog

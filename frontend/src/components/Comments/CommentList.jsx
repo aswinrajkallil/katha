@@ -1,137 +1,197 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-import { useToast } from "../../context/ToastContext";
-import apiFetch from "../../api/api";
-import CommentForm from "./CommentForm";
-import ConfirmDialog from "../ConfirmDialog";
+import React, { useState, useMemo } from "react";
+import { MessageSquare, ChevronDown, Check } from "lucide-react";
+import CommentItem from "./CommentItem";
+import "./Comments.css";
 
-const CommentItem = ({ comment, postId, onCommentAdded, onCommentDeleted }) => {
-    const { user } = useAuth();
-    const toast = useToast();
-    const [showReplyForm, setShowReplyForm] = useState(false);
-    const [confirmDelete, setConfirmDelete] = useState(false);
-    const [deleting, setDeleting] = useState(false);
+// Helper to build arbitrary depth comment tree from flat array
+const buildCommentTree = (comments = [], sortBy = "best") => {
+  const nodeMap = new Map();
+  const roots = [];
 
-    const isAuthor = user && comment.author && (user._id === comment.author._id || user.id === comment.author._id);
-    const isAdmin = user && user.role === "admin";
-    const canDelete = isAuthor || isAdmin;
+  // Step 1: Create a clone of each comment with empty children
+  comments.forEach((c) => {
+    nodeMap.set(c._id.toString(), {
+      ...c,
+      children: [],
+    });
+  });
 
-    const handleDelete = async () => {
-        setDeleting(true);
-        try {
-            const res = await apiFetch(`/comments/${comment._id}`, { method: "DELETE" });
-            if (res.ok) {
-                toast.success("Comment deleted");
-                setConfirmDelete(false);
-                if (onCommentDeleted) {
-                    onCommentDeleted(comment._id);
-                }
-            } else {
-                const data = await res.json().catch(() => ({}));
-                toast.error(data.message || "Failed to delete comment");
-            }
-        } catch {
-            toast.error("Failed to delete comment");
-        } finally {
-            setDeleting(false);
-        }
-    };
+  // Step 2: Assemble parent-child tree
+  comments.forEach((c) => {
+    const node = nodeMap.get(c._id.toString());
+    const parentId = c.parentComment
+      ? (typeof c.parentComment === "object" ? c.parentComment._id : c.parentComment).toString()
+      : null;
 
-    const handleReplyAdded = (reply) => {
-        if (onCommentAdded) {
-            onCommentAdded(reply);
-        }
-        setShowReplyForm(false);
-    };
-
-    return (
-        <div style={{ borderLeft: "3px solid #eee", paddingLeft: 16, marginBottom: 16 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                <strong>
-                    <Link to={`/profile/${comment.author?.username || comment.author?._id}`} style={{ color: "#202124", textDecoration: "none" }}>
-                        @{comment.author?.username || "Unknown"}
-                    </Link>
-                </strong>
-                <span style={{ color: "#888", fontSize: 12 }}>
-                    {new Date(comment.createdAt).toLocaleDateString()}
-                </span>
-            </div>
-            <p style={{ margin: "0 0 8px", lineHeight: 1.6, color: "#374151" }}>{comment.content}</p>
-            <div style={{ display: "flex", gap: 12, fontSize: 13 }}>
-                {user && !comment.parentComment && (
-                    <button
-                        onClick={() => setShowReplyForm((v) => !v)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#e8590c", fontWeight: 500 }}
-                    >
-                        Reply
-                    </button>
-                )}
-                {canDelete && (
-                    <button
-                        onClick={() => setConfirmDelete(true)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontWeight: 500 }}
-                    >
-                        Delete
-                    </button>
-                )}
-            </div>
-            {showReplyForm && (
-                <div style={{ marginTop: 8 }}>
-                    <CommentForm
-                        postId={postId}
-                        parentCommentId={comment._id}
-                        onCommentAdded={handleReplyAdded}
-                        onCancel={() => setShowReplyForm(false)}
-                    />
-                </div>
-            )}
-            {comment.replies?.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                    {comment.replies.map((reply) => (
-                        <CommentItem
-                            key={reply._id}
-                            comment={reply}
-                            postId={postId}
-                            onCommentAdded={onCommentAdded}
-                            onCommentDeleted={onCommentDeleted}
-                        />
-                    ))}
-                </div>
-            )}
-
-            <ConfirmDialog
-                isOpen={confirmDelete}
-                title="Delete comment?"
-                message="Are you sure you want to delete this comment? This cannot be undone."
-                confirmText="Delete"
-                cancelText="Cancel"
-                loading={deleting}
-                onConfirm={handleDelete}
-                onClose={() => setConfirmDelete(false)}
-            />
-        </div>
-    );
-};
-
-const CommentList = ({ comments, postId, onCommentAdded, onCommentDeleted }) => {
-    if (!comments.length) {
-        return <p style={{ color: "#888", fontStyle: "italic", margin: "16px 0" }}>No comments yet. Be the first to share your thoughts!</p>;
+    if (parentId && nodeMap.has(parentId)) {
+      nodeMap.get(parentId).children.push(node);
+    } else {
+      roots.push(node);
     }
+  });
 
-    return (
-        <div style={{ marginTop: 16 }}>
-            {comments.map((comment) => (
-                <CommentItem
-                    key={comment._id}
-                    comment={comment}
-                    postId={postId}
-                    onCommentAdded={onCommentAdded}
-                    onCommentDeleted={onCommentDeleted}
-                />
-            ))}
-        </div>
-    );
+  // Step 3: Sort children chronologically (oldest first for Reddit conversational flow)
+  nodeMap.forEach((node) => {
+    if (node.children.length > 1) {
+      node.children.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    }
+  });
+
+  // Step 4: Sort roots based on selected sort
+  roots.sort((a, b) => {
+    if (sortBy === "new") {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
+    if (sortBy === "old") {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    }
+    // "best" is default (likes count desc, then date desc)
+    const aLikes = a.likesCount || 0;
+    const bLikes = b.likesCount || 0;
+    if (bLikes !== aLikes) {
+      return bLikes - aLikes;
+    }
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  return roots;
 };
 
-export default CommentList;
+export default function CommentList({
+  comments = [],
+  postId,
+  postAuthorId,
+  loading = false,
+  sortBy = "best",
+  onSortChange,
+  onCommentAdded,
+  onCommentUpdated,
+  onCommentDeleted,
+}) {
+  const [sortOpen, setSortOpen] = useState(false);
+  const [visibleTopLevelCount, setVisibleTopLevelCount] = useState(20);
+
+  // Build tree
+  const roots = useMemo(() => {
+    return buildCommentTree(comments, sortBy);
+  }, [comments, sortBy]);
+
+  const sortOptions = [
+    { key: "best", label: "Best" },
+    { key: "new", label: "New" },
+    { key: "old", label: "Old" },
+  ];
+
+  const currentSortLabel = sortOptions.find((o) => o.key === sortBy)?.label || "Best";
+
+  const handleSelectSort = (key) => {
+    setSortOpen(false);
+    if (onSortChange) {
+      onSortChange(key);
+    }
+  };
+
+  const visibleRoots = roots.slice(0, visibleTopLevelCount);
+  const hasMore = roots.length > visibleTopLevelCount;
+
+  return (
+    <div className="reddit-comments-container">
+      {/* Header Row: N Comments & Sort Dropdown */}
+      <div className="reddit-comments-header">
+        <h3 className="reddit-comments-title">
+          <span>Comments</span>
+          <span className="reddit-comments-count-pill">{comments.length}</span>
+        </h3>
+
+        {comments.length > 0 && (
+          <div className="reddit-sort-wrapper">
+            <span className="reddit-sort-label">Sort by:</span>
+            <button
+              type="button"
+              className="reddit-sort-btn"
+              onClick={() => setSortOpen((v) => !v)}
+              aria-label={`Sort comments by ${currentSortLabel}`}
+            >
+              <span>{currentSortLabel}</span>
+              <ChevronDown size={14} />
+            </button>
+
+            {sortOpen && (
+              <div className="reddit-sort-menu">
+                {sortOptions.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    className={`reddit-sort-item ${sortBy === opt.key ? "active" : ""}`}
+                    onClick={() => handleSelectSort(opt.key)}
+                  >
+                    <span>{opt.label}</span>
+                    {sortBy === opt.key && <Check size={14} color="#e8590c" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Loading Skeletons */}
+      {loading && comments.length === 0 && (
+        <div className="reddit-comments-skeleton-list">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="reddit-comment-skeleton">
+              <div className="reddit-skeleton-avatar" />
+              <div className="reddit-skeleton-content">
+                <div className="reddit-skeleton-line-sm" />
+                <div className="reddit-skeleton-line-lg" />
+                <div className="reddit-skeleton-line-md" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && comments.length === 0 && (
+        <div className="reddit-comments-empty">
+          <div className="reddit-empty-icon-wrap">
+            <MessageSquare size={24} />
+          </div>
+          <p className="reddit-empty-text">
+            No comments yet. Be the first to share your thoughts.
+          </p>
+        </div>
+      )}
+
+      {/* Comment Tree */}
+      {visibleRoots.length > 0 && (
+        <div className="reddit-comment-tree">
+          {visibleRoots.map((rootComment) => (
+            <CommentItem
+              key={rootComment._id}
+              comment={rootComment}
+              postId={postId}
+              postAuthorId={postAuthorId}
+              depth={0}
+              onCommentAdded={onCommentAdded}
+              onCommentUpdated={onCommentUpdated}
+              onCommentDeleted={onCommentDeleted}
+            />
+          ))}
+
+          {/* Load More Top-Level Comments */}
+          {hasMore && (
+            <button
+              type="button"
+              className="reddit-view-more-replies-btn"
+              style={{ marginTop: 16, alignSelf: "center" }}
+              onClick={() => setVisibleTopLevelCount((prev) => prev + 20)}
+            >
+              <span>Load more comments ({roots.length - visibleTopLevelCount} remaining)</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
