@@ -72,9 +72,9 @@ const getFollowingFeed = async (req, res) => {
         }
 
         // Determine sort order
-        let sortOption = { createdAt: -1 };
-        if (sort === "views") {
-            sortOption = { views: -1, createdAt: -1 };
+        let sortOption = { createdAt: -1, _id: -1 };
+        if (sort === "views" || sort === "mostViewed") {
+            sortOption = { views: -1, createdAt: -1, _id: -1 };
         }
 
         const [posts, total] = await Promise.all([
@@ -89,7 +89,7 @@ const getFollowingFeed = async (req, res) => {
 
         const postIds = posts.map(p => p._id);
         const counts = await Comment.aggregate([
-            { $match: { post: { $in: postIds } } },
+            { $match: { post: { $in: postIds }, isDeleted: { $ne: true } } },
             { $group: { _id: "$post", count: { $sum: 1 } } }
         ]);
         const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
@@ -99,8 +99,12 @@ const getFollowingFeed = async (req, res) => {
             commentsCount: countMap.get(p._id.toString()) || 0
         }));
 
-        if (sort === "comments") {
-            postsWithCounts.sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0));
+        if (sort === "comments" || sort === "mostCommented") {
+            postsWithCounts.sort((a, b) => {
+                const diff = (b.commentsCount || 0) - (a.commentsCount || 0);
+                if (diff !== 0) return diff;
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            });
         }
 
         return res.json({

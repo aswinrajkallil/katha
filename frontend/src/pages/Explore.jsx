@@ -3,11 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
   Flame,
-  Sparkles,
   Video,
   Eye,
   MessageCircle,
-  X,
   Compass,
   RefreshCw,
 } from "lucide-react";
@@ -17,6 +15,8 @@ import apiFetch from "../api/api";
 import PostCard from "../components/Posts/PostCard";
 import UserAvatar from "../components/UserAvatar";
 import HorizontalScroller from "../components/HorizontalScroller";
+import AuthorStripItem from "../components/AuthorStripItem";
+import SortBar, { buildFeedQueryUrl } from "../components/SortBar";
 import ConfirmDialog from "../components/ConfirmDialog";
 import "./Explore.css";
 
@@ -92,9 +92,9 @@ export default function Explore() {
     }
   }, []);
 
-  // Fetch All Posts
+  // Fetch All Posts with AbortSignal to cancel stale requests
   const fetchPosts = useCallback(
-    async (targetPage = 1, append = false) => {
+    async (targetPage = 1, append = false, signal = null) => {
       if (append) {
         setPostsLoadingMore(true);
       } else {
@@ -103,11 +103,15 @@ export default function Explore() {
       }
 
       try {
-        let url = `/posts?page=${targetPage}&limit=10&sort=${sort}`;
-        if (hasVideo) url += "&hasVideo=true";
-        if (selectedAuthor?._id) url += `&author=${selectedAuthor._id}`;
+        const url = buildFeedQueryUrl("/posts", {
+          page: targetPage,
+          limit: 10,
+          sort,
+          hasVideo,
+          authorId: selectedAuthor?._id || null,
+        });
 
-        const res = await apiFetch(url);
+        const res = await apiFetch(url, { signal });
         const data = await res.json();
         if (!res.ok || !data.success) {
           throw new Error(data.message || "Failed to load posts");
@@ -123,6 +127,7 @@ export default function Explore() {
           setPosts(newPosts);
         }
       } catch (err) {
+        if (err.name === "AbortError") return;
         setPostsError(err.message || "Unable to load posts");
       } finally {
         setPostsLoading(false);
@@ -132,17 +137,43 @@ export default function Explore() {
     [sort, hasVideo, selectedAuthor]
   );
 
-  // Initial loads
+  // Initial loads for authors & trending
   useEffect(() => {
     fetchAuthors();
     fetchTrending();
   }, [fetchAuthors, fetchTrending]);
 
+  // Feed fetch on sort/filter change with AbortController
   useEffect(() => {
-    fetchPosts(1, false);
+    const controller = new AbortController();
+    fetchPosts(1, false, controller.signal);
+    return () => {
+      controller.abort();
+    };
   }, [fetchPosts]);
 
-  // Load More Posts
+  // Handle Sort Change (resets to page 1 & scrolls smoothly)
+  const handleSortChange = (newSort) => {
+    setSort(newSort);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Handle Has Video Toggle (resets to page 1 & scrolls smoothly)
+  const handleHasVideoToggle = () => {
+    setHasVideo((v) => !v);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Handle Clear Author filter
+  const handleClearAuthor = () => {
+    setSelectedAuthor(null);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Load More Posts (Pagination)
   const handleLoadMore = () => {
     if (!pagination || page >= pagination.totalPages || postsLoadingMore) return;
     fetchPosts(page + 1, true);
@@ -280,22 +311,20 @@ export default function Explore() {
   return (
     <main className="explore-container">
       {/* =========================================
-          1. POPULAR AUTHORS ROW (Floating, no card)
+          1. POPULAR AUTHORS ROW (Floating, unboxed)
       ========================================= */}
       <section className="explore-authors-section" aria-label="Popular authors">
         <div className="explore-section-header">
           <div className="explore-section-title-wrap">
-            <span className="explore-section-icon">
-              <Users size={16} />
-            </span>
-            <h2 className="explore-section-heading">Popular Authors</h2>
+            <Users size={14} color="#e8590c" />
+            <h2 className="explore-section-heading">POPULAR AUTHORS</h2>
           </div>
         </div>
 
         {/* Loading Skeletons */}
         {authorsLoading && (
           <div style={{ display: "flex", gap: 14, overflowX: "hidden" }}>
-            {[1, 2, 3, 4, 5].map((n) => (
+            {[1, 2, 3, 4, 5, 6].map((n) => (
               <div key={n} className="explore-author-skeleton" />
             ))}
           </div>
@@ -315,50 +344,34 @@ export default function Explore() {
           </div>
         )}
 
-        {/* Authors Scroller */}
+        {/* Authors Scroller (Floating, unboxed style matching Following strip) */}
         {!authorsLoading && !authorsError && authors.length > 0 && (
-          <HorizontalScroller gap={14} scrollStep={280} ariaLabel="Popular authors row">
+          <HorizontalScroller gap={14} scrollStep={240} ariaLabel="Popular authors row">
             {authors.map((author) => {
-              const currentUserId = user?._id || user?.id;
-              const isSelf = Boolean(
-                currentUserId && author._id && currentUserId.toString() === author._id.toString()
-              );
+              const isSelected = selectedAuthor?._id === author._id;
 
               return (
-                <div key={author._id} className="explore-author-card">
-                  <Link
-                    to={`/profile/${author.username}`}
-                    className="explore-author-link"
-                    title={`View @${author.username}'s profile`}
-                  >
-                    <UserAvatar user={author} size={52} />
-                    <span className="explore-author-name">@{author.username}</span>
-                    <span className="explore-author-stats">
-                      {author.postCount} {author.postCount === 1 ? "story" : "stories"}
-                    </span>
-                    <span className="explore-author-stats" style={{ color: "#9ca3af" }}>
-                      {author.followersCount || 0} followers
-                    </span>
-                  </Link>
-
-                  {!isSelf && (
-                    <button
-                      type="button"
-                      className={`explore-author-follow-btn ${
-                        author.isFollowing ? "following" : "follow"
-                      }`}
-                      onClick={() => {
-                        if (author.isFollowing) {
-                          setUnfollowTarget(author);
-                        } else {
-                          handleFollowAuthor(author);
-                        }
-                      }}
-                    >
-                      {author.isFollowing ? "Following" : "Follow"}
-                    </button>
-                  )}
-                </div>
+                <AuthorStripItem
+                  key={author._id}
+                  author={author}
+                  isSelected={isSelected}
+                  showStats={true}
+                  showFollowButton={true}
+                  onFollowToggle={(target) => {
+                    if (target.isFollowing) {
+                      setUnfollowTarget(target);
+                    } else {
+                      handleFollowAuthor(target);
+                    }
+                  }}
+                  onClick={() => {
+                    if (author.username) {
+                      navigate(`/profile/${author.username}`);
+                    } else {
+                      setSelectedAuthor(author);
+                    }
+                  }}
+                />
               );
             })}
           </HorizontalScroller>
@@ -371,10 +384,8 @@ export default function Explore() {
       <section className="explore-trending-section" aria-label="Trending posts">
         <div className="explore-section-header">
           <div className="explore-section-title-wrap">
-            <span className="explore-section-icon">
-              <Flame size={16} />
-            </span>
-            <h2 className="explore-section-heading">{trendingLabel}</h2>
+            <Flame size={14} color="#e8590c" />
+            <h2 className="explore-section-heading">{trendingLabel.toUpperCase()}</h2>
             <span className="explore-section-badge">Top picks</span>
           </div>
         </div>
@@ -478,65 +489,17 @@ export default function Explore() {
           3. ALL POSTS SECTION
       ========================================= */}
       <section className="explore-posts-section" aria-label="All published posts">
-        {/* Sticky Sort and Filter Bar */}
-        <div className="explore-sort-bar">
-          <div className="explore-sort-group">
-            <button
-              type="button"
-              className={`following-pill-btn ${sort === "latest" ? "active" : ""}`}
-              onClick={() => setSort("latest")}
-            >
-              <Sparkles size={14} />
-              <span>Latest</span>
-            </button>
+        {/* Shared Sticky Sort and Filter Bar */}
+        <SortBar
+          sort={sort}
+          onSortChange={handleSortChange}
+          hasVideo={hasVideo}
+          onHasVideoToggle={handleHasVideoToggle}
+          selectedAuthor={selectedAuthor}
+          onClearAuthor={handleClearAuthor}
+        />
 
-            <button
-              type="button"
-              className={`following-pill-btn ${sort === "mostViewed" ? "active" : ""}`}
-              onClick={() => setSort("mostViewed")}
-            >
-              <span>Most viewed</span>
-            </button>
-
-            <button
-              type="button"
-              className={`following-pill-btn ${sort === "mostCommented" ? "active" : ""}`}
-              onClick={() => setSort("mostCommented")}
-            >
-              <span>Most commented</span>
-            </button>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Active Author Filter Badge */}
-            {selectedAuthor && (
-              <span className="explore-author-filter-chip">
-                <span>@{selectedAuthor.username}</span>
-                <button
-                  type="button"
-                  className="explore-author-filter-clear"
-                  onClick={() => setSelectedAuthor(null)}
-                  aria-label="Clear author filter"
-                >
-                  <X size={13} />
-                </button>
-              </span>
-            )}
-
-            {/* Has Video Toggle */}
-            <button
-              type="button"
-              className={`following-filter-toggle ${hasVideo ? "active" : ""}`}
-              onClick={() => setHasVideo((prev) => !prev)}
-              aria-pressed={hasVideo}
-            >
-              <Video size={15} />
-              <span>Has video</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Loading Skeletons */}
+        {/* Loading Skeletons during initial or refetch */}
         {postsLoading && (
           <div className="explore-posts-stream">
             {[1, 2, 3].map((n) => (
@@ -553,7 +516,7 @@ export default function Explore() {
           </div>
         )}
 
-        {/* Posts Error */}
+        {/* Posts Error State */}
         {!postsLoading && postsError && (
           <div className="following-error-card" role="alert">
             <h2 className="following-error-title">Unable to load stories</h2>
@@ -569,28 +532,45 @@ export default function Explore() {
           </div>
         )}
 
-        {/* Empty State */}
-        {!postsLoading && !postsError && posts.length === 0 && (
+        {/* Dedicated Empty State: Has Video toggle returns 0 posts */}
+        {!postsLoading && !postsError && posts.length === 0 && hasVideo && (
+          <div className="following-empty-card">
+            <div className="following-empty-icon" style={{ background: "#ffedd5", color: "#e8590c" }}>
+              <Video size={28} />
+            </div>
+            <h2 className="following-empty-title">No video posts yet</h2>
+            <p className="following-empty-desc">
+              There are currently no published stories with videos matching your criteria.
+            </p>
+            <button
+              type="button"
+              className="following-pill-btn active"
+              onClick={handleHasVideoToggle}
+            >
+              Show all stories
+            </button>
+          </div>
+        )}
+
+        {/* General Empty State */}
+        {!postsLoading && !postsError && posts.length === 0 && !hasVideo && (
           <div className="following-empty-card">
             <div className="following-empty-icon">
               <Compass size={28} />
             </div>
             <h2 className="following-empty-title">No stories found</h2>
             <p className="following-empty-desc">
-              {hasVideo || selectedAuthor
-                ? "No stories match your current filters. Try resetting the filters."
+              {selectedAuthor
+                ? "No stories match your current author filter. Try resetting the filter."
                 : "No published stories yet. Be the first to publish a story on Kathā!"}
             </p>
-            {(hasVideo || selectedAuthor) ? (
+            {selectedAuthor ? (
               <button
                 type="button"
                 className="following-pill-btn"
-                onClick={() => {
-                  setHasVideo(false);
-                  setSelectedAuthor(null);
-                }}
+                onClick={handleClearAuthor}
               >
-                Reset filters
+                Reset filter
               </button>
             ) : (
               <Link to="/write" className="following-discover-btn">

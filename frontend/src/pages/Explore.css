@@ -33,16 +33,16 @@
 }
 
 .explore-section-heading {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #4b5563;
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   margin: 0;
 }
 
 .explore-section-badge {
-  font-size: 0.725rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: #e8590c;
   background: #fff7ed;
@@ -51,92 +51,9 @@
   border: 1px solid #fed7aa;
 }
 
-/* 1. Popular Authors Row (Floating, unboxed) */
+/* 1. Popular Authors Row (Floating, unboxed, blends with background) */
 .explore-authors-section {
   width: 100%;
-}
-
-.explore-author-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #edf0f2;
-  border-radius: 16px;
-  padding: 14px 12px;
-  width: 136px;
-  min-width: 136px;
-  text-align: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.explore-author-card:hover {
-  transform: translateY(-2px);
-  border-color: #cbd5e1;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.05);
-}
-
-.explore-author-link {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-decoration: none;
-  color: inherit;
-  width: 100%;
-}
-
-.explore-author-name {
-  font-size: 0.825rem;
-  font-weight: 700;
-  color: #111827;
-  margin-top: 8px;
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.explore-author-stats {
-  font-size: 0.725rem;
-  color: #6b7280;
-  margin-top: 2px;
-  line-height: 1.25;
-}
-
-.explore-author-follow-btn {
-  margin-top: 10px;
-  width: 100%;
-  font-size: 0.775rem;
-  font-weight: 700;
-  padding: 5px 0;
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-height: 32px;
-}
-
-.explore-author-follow-btn.follow {
-  background: #e8590c;
-  color: #ffffff;
-}
-
-.explore-author-follow-btn.follow:hover {
-  background: #c2410c;
-}
-
-.explore-author-follow-btn.following {
-  background: #f3f4f6;
-  color: #4b5563;
-  border: 1px solid #d1d5db;
-}
-
-.explore-author-follow-btn.following:hover {
-  background: #fee2e2;
-  border-color: #fca5a5;
-  color: #dc2626;
 }
 
 /* 2. Trending Section */
@@ -271,60 +188,7 @@
   gap: 8px;
 }
 
-/* 3. Sticky Sort Bar for All Posts */
-.explore-sort-bar {
-  position: sticky;
-  top: 56px;
-  z-index: 20;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid #edf0f2;
-  padding: 10px 0;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.explore-sort-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.explore-sort-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.explore-author-filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #c2410c;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.explore-author-filter-clear {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #c2410c;
-  display: flex;
-  align-items: center;
-  padding: 0;
-}
-
-/* 4. All Posts Stream */
+/* 3. All Posts Stream */
 .explore-posts-section {
   width: 100%;
 }

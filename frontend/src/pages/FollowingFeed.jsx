@@ -7,7 +7,6 @@ import {
   X,
   Compass,
   RefreshCw,
-  Sparkles,
   Inbox,
   UserCheck,
 } from "lucide-react";
@@ -18,6 +17,8 @@ import PostCard from "../components/Posts/PostCard";
 import UserAvatar from "../components/UserAvatar";
 import ConfirmDialog from "../components/ConfirmDialog";
 import HorizontalScroller from "../components/HorizontalScroller";
+import AuthorStripItem from "../components/AuthorStripItem";
+import SortBar, { buildFeedQueryUrl } from "../components/SortBar";
 import "./FollowingFeed.css";
 
 export default function FollowingFeed() {
@@ -36,7 +37,7 @@ export default function FollowingFeed() {
   const [error, setError] = useState("");
 
   // Filters & Sorting
-  const [sort, setSort] = useState("latest"); // "latest" | "views" | "comments"
+  const [sort, setSort] = useState("latest"); // "latest" | "mostViewed" | "mostCommented"
   const [hasVideo, setHasVideo] = useState(false);
   const [selectedAuthor, setSelectedAuthor] = useState(null); // author object or null
 
@@ -62,16 +63,15 @@ export default function FollowingFeed() {
   // Update visit time when mounting
   useEffect(() => {
     const now = Date.now();
-    // Keep lastVisitTime in state for comparison in this session, then update localStorage
     const timeout = setTimeout(() => {
       localStorage.setItem(storageKey, String(now));
     }, 1500);
     return () => clearTimeout(timeout);
   }, [storageKey]);
 
-  // Fetch Feed
+  // Fetch Feed with signal to abort stale requests
   const fetchFeed = useCallback(
-    async (targetPage = 1, append = false) => {
+    async (targetPage = 1, append = false, signal = null) => {
       if (append) {
         setLoadingMore(true);
       } else {
@@ -80,11 +80,15 @@ export default function FollowingFeed() {
       }
 
       try {
-        let url = `/feed/following?page=${targetPage}&limit=10&sort=${sort}`;
-        if (hasVideo) url += "&hasVideo=true";
-        if (selectedAuthor?._id) url += `&author=${selectedAuthor._id}`;
+        const url = buildFeedQueryUrl("/feed/following", {
+          page: targetPage,
+          limit: 10,
+          sort,
+          hasVideo,
+          authorId: selectedAuthor?._id || null,
+        });
 
-        const res = await apiFetch(url);
+        const res = await apiFetch(url, { signal });
         const data = await res.json();
 
         if (!res.ok || !data.success) {
@@ -107,6 +111,7 @@ export default function FollowingFeed() {
           setNewPostsCount(0);
         }
       } catch (err) {
+        if (err.name === "AbortError") return;
         setError(err.message || "Failed to load stories");
       } finally {
         setLoading(false);
@@ -116,10 +121,35 @@ export default function FollowingFeed() {
     [sort, hasVideo, selectedAuthor]
   );
 
-  // Initial and Filter change fetch
+  // Initial & Filter change fetch with AbortController
   useEffect(() => {
-    fetchFeed(1, false);
+    const controller = new AbortController();
+    fetchFeed(1, false, controller.signal);
+    return () => {
+      controller.abort();
+    };
   }, [fetchFeed]);
+
+  // Handle Sort Change (reset to page 1 & scroll)
+  const handleSortChange = (newSort) => {
+    setSort(newSort);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Handle Has Video Toggle (reset to page 1 & scroll)
+  const handleHasVideoToggle = () => {
+    setHasVideo((v) => !v);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Handle Clear Author filter
+  const handleClearAuthor = () => {
+    setSelectedAuthor(null);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Fetch suggestions when user follows 0 people
   useEffect(() => {
@@ -132,7 +162,6 @@ export default function FollowingFeed() {
           }
         })
         .catch(() => {
-          // If dedicated suggestions endpoint is not yet mounted, fallback to popular authors
           apiFetch("/discover/authors")
             .then((res) => res.json())
             .then((data) => {
@@ -153,9 +182,13 @@ export default function FollowingFeed() {
       if (document.hidden) return;
 
       try {
-        let url = `/feed/following?page=1&limit=5&sort=${sort}`;
-        if (hasVideo) url += "&hasVideo=true";
-        if (selectedAuthor?._id) url += `&author=${selectedAuthor._id}`;
+        const url = buildFeedQueryUrl("/feed/following", {
+          page: 1,
+          limit: 5,
+          sort,
+          hasVideo,
+          authorId: selectedAuthor?._id || null,
+        });
 
         const res = await apiFetch(url);
         const data = await res.json();
@@ -163,7 +196,6 @@ export default function FollowingFeed() {
           const latestFetched = data.data.posts;
           const currentTopId = posts[0]?._id;
           if (currentTopId && latestFetched[0]?._id !== currentTopId) {
-            // Count how many new posts arrived
             const newIndex = latestFetched.findIndex((p) => p._id === currentTopId);
             const count = newIndex > 0 ? newIndex : latestFetched.length;
             setNewPostsCount(count);
@@ -194,7 +226,6 @@ export default function FollowingFeed() {
       if (res.ok && data.success) {
         setFollowingMap((prev) => ({ ...prev, [targetId]: true }));
         toast.success(`Following @${targetUser.username}`);
-        // Refresh feed so new stories appear
         fetchFeed(1, false);
       } else {
         toast.error(data.message || "Failed to follow user");
@@ -216,12 +247,9 @@ export default function FollowingFeed() {
 
       if (res.ok && data.success) {
         toast.success(`Unfollowed @${unfollowTarget.username}`);
-        // Remove from local people list
         setPeople((prev) => prev.filter((p) => p._id !== targetId));
         setFollowingCount((prev) => Math.max(0, (prev || 1) - 1));
-        // Remove their posts from current stream
         setPosts((prev) => prev.filter((post) => post.author?._id !== targetId));
-        // If selected author was unfollowed, reset filter
         if (selectedAuthor?._id === targetId) {
           setSelectedAuthor(null);
         }
@@ -257,7 +285,7 @@ export default function FollowingFeed() {
             <button
               type="button"
               className={`following-person-item ${!selectedAuthor ? "selected" : ""}`}
-              onClick={() => setSelectedAuthor(null)}
+              onClick={handleClearAuthor}
               title="All followed stories"
             >
               <div
@@ -285,7 +313,7 @@ export default function FollowingFeed() {
               <span className="following-person-name">All Stories</span>
             </button>
 
-            {/* People Cards */}
+            {/* Shared AuthorStripItem for followed authors */}
             {people.map((person) => {
               const hasNewPost =
                 person.latestPostAt &&
@@ -293,9 +321,11 @@ export default function FollowingFeed() {
               const isSelected = selectedAuthor?._id === person._id;
 
               return (
-                <div
+                <AuthorStripItem
                   key={person._id}
-                  className={`following-person-item ${isSelected ? "selected" : ""}`}
+                  author={person}
+                  hasNewPost={hasNewPost}
+                  isSelected={isSelected}
                   onClick={() => {
                     if (person.username) {
                       navigate(`/profile/${person.username}`);
@@ -303,92 +333,26 @@ export default function FollowingFeed() {
                       setSelectedAuthor(person);
                     }
                   }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      navigate(`/profile/${person.username}`);
-                    }
-                  }}
-                  title={`View @${person.username}'s profile`}
-                >
-                  <div
-                    className={`following-avatar-ring-wrap ${
-                      hasNewPost ? "has-new" : ""
-                    } ${isSelected ? "active-filter" : ""}`}
-                  >
-                    <UserAvatar user={person} size={48} />
-                    {hasNewPost && <span className="following-new-dot" />}
-                  </div>
-                  <span className="following-person-name">@{person.username}</span>
-                </div>
+                />
               );
             })}
           </HorizontalScroller>
         </section>
       )}
 
-      {/* 3. Sticky Sort and Filter Bar */}
+      {/* 2. Shared Sticky Sort and Filter Bar */}
       {followingCount !== 0 && (
-        <div className="following-filter-bar">
-          <div className="following-sort-group">
-            <button
-              type="button"
-              className={`following-pill-btn ${sort === "latest" ? "active" : ""}`}
-              onClick={() => setSort("latest")}
-            >
-              <Sparkles size={14} />
-              <span>Latest</span>
-            </button>
-
-            <button
-              type="button"
-              className={`following-pill-btn ${sort === "views" ? "active" : ""}`}
-              onClick={() => setSort("views")}
-            >
-              <span>Most viewed</span>
-            </button>
-
-            <button
-              type="button"
-              className={`following-pill-btn ${sort === "comments" ? "active" : ""}`}
-              onClick={() => setSort("comments")}
-            >
-              <span>Most commented</span>
-            </button>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Active Author Filter Badge */}
-            {selectedAuthor && (
-              <span className="following-author-filter-badge">
-                <span>@{selectedAuthor.username}</span>
-                <button
-                  type="button"
-                  className="following-author-filter-clear"
-                  onClick={() => setSelectedAuthor(null)}
-                  aria-label="Clear author filter"
-                >
-                  <X size={13} />
-                </button>
-              </span>
-            )}
-
-            {/* Has Video Toggle */}
-            <button
-              type="button"
-              className={`following-filter-toggle ${hasVideo ? "active" : ""}`}
-              onClick={() => setHasVideo((prev) => !prev)}
-              aria-pressed={hasVideo}
-            >
-              <Video size={15} />
-              <span>Has video</span>
-            </button>
-          </div>
-        </div>
+        <SortBar
+          sort={sort}
+          onSortChange={handleSortChange}
+          hasVideo={hasVideo}
+          onHasVideoToggle={handleHasVideoToggle}
+          selectedAuthor={selectedAuthor}
+          onClearAuthor={handleClearAuthor}
+        />
       )}
 
-      {/* 4. Floating "N New Posts" Button */}
+      {/* 3. Floating "N New Posts" Button */}
       {newPostsCount > 0 && (
         <button
           type="button"
@@ -405,7 +369,7 @@ export default function FollowingFeed() {
         </button>
       )}
 
-      {/* 5. Skeleton Loaders while initial loading */}
+      {/* 4. Skeleton Loaders while initial loading */}
       {loading && (
         <div className="following-posts-stream">
           {[1, 2, 3].map((n) => (
@@ -422,7 +386,7 @@ export default function FollowingFeed() {
         </div>
       )}
 
-      {/* 6. Error State */}
+      {/* 5. Error State */}
       {!loading && error && (
         <div className="following-error-card" role="alert">
           <h2 className="following-error-title">Unable to load stories</h2>
@@ -438,7 +402,7 @@ export default function FollowingFeed() {
         </div>
       )}
 
-      {/* 7. Empty State: User follows nobody (followingCount === 0) */}
+      {/* 6. Empty State: User follows nobody (followingCount === 0) */}
       {!loading && !error && followingCount === 0 && (
         <div className="following-empty-card">
           <div className="following-empty-icon">
@@ -506,28 +470,45 @@ export default function FollowingFeed() {
         </div>
       )}
 
-      {/* 8. Empty State: User follows people, but 0 posts match */}
-      {!loading && !error && followingCount > 0 && posts.length === 0 && (
+      {/* 7. Dedicated Empty State: Has Video toggle returns 0 posts */}
+      {!loading && !error && followingCount > 0 && posts.length === 0 && hasVideo && (
+        <div className="following-empty-card">
+          <div className="following-empty-icon" style={{ background: "#ffedd5", color: "#e8590c" }}>
+            <Video size={28} />
+          </div>
+          <h2 className="following-empty-title">No video posts yet</h2>
+          <p className="following-empty-desc">
+            None of the people you follow have published stories with videos yet.
+          </p>
+          <button
+            type="button"
+            className="following-pill-btn active"
+            onClick={handleHasVideoToggle}
+          >
+            Show all stories
+          </button>
+        </div>
+      )}
+
+      {/* 8. Empty State: User follows people, but 0 general posts match */}
+      {!loading && !error && followingCount > 0 && posts.length === 0 && !hasVideo && (
         <div className="following-empty-card">
           <div className="following-empty-icon" style={{ background: "#f3f4f6", color: "#6b7280" }}>
             <Inbox size={28} />
           </div>
           <h2 className="following-empty-title">No new stories yet</h2>
           <p className="following-empty-desc">
-            {hasVideo || selectedAuthor
-              ? "No stories match your current filters. Try resetting the filters to view all stories."
+            {selectedAuthor
+              ? "No stories match your current author filter. Try resetting the filter to view all stories."
               : "No stories have been posted yet by the people you follow."}
           </p>
-          {(hasVideo || selectedAuthor) && (
+          {selectedAuthor && (
             <button
               type="button"
               className="following-pill-btn"
-              onClick={() => {
-                setHasVideo(false);
-                setSelectedAuthor(null);
-              }}
+              onClick={handleClearAuthor}
             >
-              Reset filters
+              Reset filter
             </button>
           )}
         </div>

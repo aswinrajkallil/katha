@@ -101,7 +101,7 @@ const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const buildPostFilters = async (filters, baseQuery = {}) => {
     const query = { ...baseQuery };
-    const { search, category, type, tags, dateRange, sort } = filters;
+    const { search, category, type, tags, dateRange, sort, author, hasVideo } = filters;
 
     if (search && typeof search === "string" && search.trim()) {
         const term = new RegExp(escapeRegex(search.trim().slice(0, 100)), "i");
@@ -157,9 +157,10 @@ const buildPostFilters = async (filters, baseQuery = {}) => {
     if (fromDate) query.createdAt = { $gte: fromDate, $lte: now };
 
     const sortOptions = {
-        latest: { createdAt: -1 },
-        oldest: { createdAt: 1 },
-        mostViewed: { views: -1, createdAt: -1 }
+        latest: { createdAt: -1, _id: -1 },
+        oldest: { createdAt: 1, _id: 1 },
+        mostViewed: { views: -1, createdAt: -1, _id: -1 },
+        views: { views: -1, createdAt: -1, _id: -1 }
     };
     return { query, sort: sortOptions[sort] || sortOptions.latest };
 };
@@ -177,7 +178,7 @@ const getPosts = async (req, res) => {
         const total = await Post.countDocuments(query);
         let posts;
 
-        if (req.query.sort === "mostLiked") {
+        if (req.query.sort === "mostLiked" || req.query.sort === "likes") {
             const [ranked, matchingPosts] = await Promise.all([
                 Like.aggregate([
                     { $group: { _id: "$post", likesCount: { $sum: 1 } } },
@@ -187,12 +188,14 @@ const getPosts = async (req, res) => {
                     .populate("category", "name slug").lean()
             ]);
             const rank = new Map(ranked.map((item, index) => [item._id.toString(), index]));
-            matchingPosts.sort((a, b) =>
-                (rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER) -
-                (rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER)
-            );
+            matchingPosts.sort((a, b) => {
+                const aRank = rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                const bRank = rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                if (aRank !== bRank) return aRank - bRank;
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            });
             posts = matchingPosts.slice(skip, skip + limitNum);
-        } else if (req.query.sort === "mostCommented") {
+        } else if (req.query.sort === "mostCommented" || req.query.sort === "comments") {
             const [ranked, matchingPosts] = await Promise.all([
                 Comment.aggregate([
                     { $match: { isDeleted: { $ne: true } } },
@@ -203,10 +206,12 @@ const getPosts = async (req, res) => {
                     .populate("category", "name slug").lean()
             ]);
             const rank = new Map(ranked.map((item, index) => [item._id.toString(), index]));
-            matchingPosts.sort((a, b) =>
-                (rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER) -
-                (rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER)
-            );
+            matchingPosts.sort((a, b) => {
+                const aRank = rank.get(a._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                const bRank = rank.get(b._id.toString()) ?? Number.MAX_SAFE_INTEGER;
+                if (aRank !== bRank) return aRank - bRank;
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            });
             posts = matchingPosts.slice(skip, skip + limitNum);
         } else {
             posts = await Post.find(query).populate("author", "username profileImage")
