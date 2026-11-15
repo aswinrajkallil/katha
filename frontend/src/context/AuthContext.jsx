@@ -43,7 +43,14 @@ export const AuthProvider = ({ children }) => {
 
     const login = (accessToken, userData) => {
         localStorage.setItem("accessToken", accessToken);
-        setUser(normalizeUser(userData));
+        const normUser = normalizeUser(userData);
+        setUser(normUser);
+        try {
+            const uid = normUser?._id || normUser?.id || "guest";
+            localStorage.removeItem(`katha_welcome_seen_${uid}`);
+        } catch {
+            // Ignore storage errors
+        }
     };
 
     const logout = async () => {

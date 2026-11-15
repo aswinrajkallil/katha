@@ -1,6 +1,6 @@
 import { Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
-import { Menu, X, Search, Bell, SlidersHorizontal } from "lucide-react";
+import { Menu, X, Search, Bell, SlidersHorizontal, Sparkles, Users, Compass, FileText, Bookmark, User } from "lucide-react";
 import "./Navbar.css";
 import logoFull from "../assets/katha-logo-full.svg";
 import { useAuth } from "../context/AuthContext";
@@ -102,34 +102,50 @@ export default function Navbar() {
     }
   };
 
-  const handleApplyFilters = () => {
-    setFilterOpen(false);
+  const updateFilterParam = (key, val) => {
     const isFeedPage = location.pathname === "/" || location.pathname === "/my-posts";
+    const nextTime = key === "time" ? val : selectedTime;
+    const nextSort = key === "sort" ? val : selectedSort;
+
     if (!isFeedPage) {
       const params = new URLSearchParams();
       if (inputValue.trim()) params.set("q", inputValue.trim());
-      if (selectedTime) params.set("time", selectedTime);
-      if (selectedSort && selectedSort !== "latest") params.set("sort", selectedSort);
+      if (nextTime) params.set("time", nextTime);
+      if (nextSort && nextSort !== "latest") params.set("sort", nextSort);
       const str = params.toString();
       navigate(str ? `/?${str}` : "/");
     } else {
       setSearchParams(prev => {
         const next = new URLSearchParams(prev);
-        if (selectedTime) next.set("time", selectedTime);
-        else next.delete("time");
+        if (nextTime) {
+          next.set("time", nextTime);
+        } else {
+          next.delete("time");
+        }
 
-        if (selectedSort && selectedSort !== "latest") next.set("sort", selectedSort);
-        else next.delete("sort");
-
+        if (nextSort && nextSort !== "latest") {
+          next.set("sort", nextSort);
+        } else {
+          next.delete("sort");
+        }
         return next;
       }, { replace: true });
     }
   };
 
+  const handleTimeChange = (newVal) => {
+    setSelectedTime(newVal);
+    updateFilterParam("time", newVal);
+  };
+
+  const handleSortChange = (newVal) => {
+    setSelectedSort(newVal);
+    updateFilterParam("sort", newVal);
+  };
+
   const handleResetFilters = () => {
     setSelectedTime("");
     setSelectedSort("latest");
-    setFilterOpen(false);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.delete("time");
@@ -263,7 +279,7 @@ export default function Navbar() {
                   <select
                     id="filter-time"
                     value={selectedTime}
-                    onChange={(e) => setSelectedTime(e.target.value)}
+                    onChange={(e) => handleTimeChange(e.target.value)}
                   >
                     {dateOptions.map(([val, label]) => (
                       <option key={val || "all"} value={val}>
@@ -278,7 +294,7 @@ export default function Navbar() {
                   <select
                     id="filter-sort"
                     value={selectedSort}
-                    onChange={(e) => setSelectedSort(e.target.value)}
+                    onChange={(e) => handleSortChange(e.target.value)}
                   >
                     {sortOptions.map(([val, label]) => (
                       <option key={val} value={val}>
@@ -286,16 +302,6 @@ export default function Navbar() {
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div className="filter-popover-footer">
-                  <button
-                    type="button"
-                    onClick={handleApplyFilters}
-                    className="filter-apply-btn"
-                  >
-                    Apply
-                  </button>
                 </div>
               </div>
             )}
@@ -395,7 +401,7 @@ export default function Navbar() {
               <select
                 id="mobile-filter-time"
                 value={selectedTime}
-                onChange={(e) => setSelectedTime(e.target.value)}
+                onChange={(e) => handleTimeChange(e.target.value)}
               >
                 {dateOptions.map(([val, label]) => (
                   <option key={val || "all"} value={val}>
@@ -410,7 +416,7 @@ export default function Navbar() {
               <select
                 id="mobile-filter-sort"
                 value={selectedSort}
-                onChange={(e) => setSelectedSort(e.target.value)}
+                onChange={(e) => handleSortChange(e.target.value)}
               >
                 {sortOptions.map(([val, label]) => (
                   <option key={val} value={val}>
@@ -426,14 +432,7 @@ export default function Navbar() {
                 onClick={handleResetFilters}
                 className="filter-reset-outline-btn"
               >
-                Reset
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyFilters}
-                className="filter-apply-btn"
-              >
-                Apply
+                Reset filters
               </button>
             </div>
           </div>
@@ -463,20 +462,48 @@ export default function Navbar() {
 
         <nav className="drawer-nav">
           <p className="drawer-section-title">Feeds</p>
-          <ul>
+          <ul className="drawer-list">
             <li>
-              <NavLink to="/" end onClick={() => setDrawerOpen(false)}>
-                For You
+              <NavLink
+                to="/"
+                end
+                onClick={() => setDrawerOpen(false)}
+                className={({ isActive }) =>
+                  `drawer-link ${isActive ? "active" : ""}`
+                }
+              >
+                <span className="drawer-icon-tile">
+                  <Sparkles size={18} />
+                </span>
+                <span className="drawer-label">For You</span>
               </NavLink>
             </li>
             <li>
-              <NavLink to="/feed/following" onClick={() => setDrawerOpen(false)}>
-                Following
+              <NavLink
+                to="/feed/following"
+                onClick={() => setDrawerOpen(false)}
+                className={({ isActive }) =>
+                  `drawer-link ${isActive ? "active" : ""}`
+                }
+              >
+                <span className="drawer-icon-tile">
+                  <Users size={18} />
+                </span>
+                <span className="drawer-label">Following</span>
               </NavLink>
             </li>
             <li>
-              <NavLink to="/explore" onClick={() => setDrawerOpen(false)}>
-                Explore
+              <NavLink
+                to="/explore"
+                onClick={() => setDrawerOpen(false)}
+                className={({ isActive }) =>
+                  `drawer-link ${isActive ? "active" : ""}`
+                }
+              >
+                <span className="drawer-icon-tile">
+                  <Compass size={18} />
+                </span>
+                <span className="drawer-label">Explore</span>
               </NavLink>
             </li>
           </ul>
@@ -484,23 +511,47 @@ export default function Navbar() {
           {user && (
             <>
               <p className="drawer-section-title">Your Space</p>
-              <ul>
+              <ul className="drawer-list">
                 <li>
-                  <NavLink to="/my-posts" onClick={() => setDrawerOpen(false)}>
-                    My Posts
+                  <NavLink
+                    to="/my-posts"
+                    onClick={() => setDrawerOpen(false)}
+                    className={({ isActive }) =>
+                      `drawer-link ${isActive ? "active" : ""}`
+                    }
+                  >
+                    <span className="drawer-icon-tile">
+                      <FileText size={18} />
+                    </span>
+                    <span className="drawer-label">My Posts</span>
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink to="/bookmarks" onClick={() => setDrawerOpen(false)}>
-                    Bookmarks
+                  <NavLink
+                    to="/bookmarks"
+                    onClick={() => setDrawerOpen(false)}
+                    className={({ isActive }) =>
+                      `drawer-link ${isActive ? "active" : ""}`
+                    }
+                  >
+                    <span className="drawer-icon-tile">
+                      <Bookmark size={18} />
+                    </span>
+                    <span className="drawer-label">Bookmarks</span>
                   </NavLink>
                 </li>
                 <li>
                   <NavLink
                     to={`/profile/${user.username || user._id}`}
                     onClick={() => setDrawerOpen(false)}
+                    className={({ isActive }) =>
+                      `drawer-link ${isActive ? "active" : ""}`
+                    }
                   >
-                    Profile
+                    <span className="drawer-icon-tile">
+                      <User size={18} />
+                    </span>
+                    <span className="drawer-label">Profile</span>
                   </NavLink>
                 </li>
               </ul>

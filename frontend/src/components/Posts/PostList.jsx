@@ -24,44 +24,56 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
         setPage(1);
     }, [qParam, timeParam, sortParam]);
 
-    const fetchPosts = useCallback(async () => {
-        setLoading(true);
-        setError("");
-        try {
-            const params = new URLSearchParams({ page: String(page), limit: "10" });
-            if (canFilter) {
-                if (qParam) params.set("search", qParam);
-                if (timeParam) params.set("dateRange", timeParam);
-                params.set("sort", sortParam);
-            }
-
-            const path = myPosts
-                ? "/posts/my"
-                : authorId
-                ? `/users/${encodeURIComponent(authorId)}/posts`
-                : "/posts";
-
-            const response = await apiFetch(`${path}?${params.toString()}`);
-            const data = await response.json();
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || "Failed to load posts");
-            }
-            setPosts(data.data.posts || []);
-            setPagination(data.data.pagination || null);
-        } catch (err) {
-            setError(
-                err.message === "SESSION_EXPIRED"
-                    ? "Your session has expired. Please sign in again."
-                    : (err.message || "Failed to load posts")
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [myPosts, authorId, page, canFilter, qParam, timeParam, sortParam]);
-
     useEffect(() => {
-        fetchPosts();
-    }, [fetchPosts]);
+        let isCurrent = true;
+
+        const loadPosts = async () => {
+            setLoading(true);
+            setError("");
+            try {
+                const params = new URLSearchParams({ page: String(page), limit: "10" });
+                if (canFilter) {
+                    if (qParam) params.set("search", qParam);
+                    if (timeParam) params.set("dateRange", timeParam);
+                    params.set("sort", sortParam);
+                }
+
+                const path = myPosts
+                    ? "/posts/my"
+                    : authorId
+                    ? `/users/${encodeURIComponent(authorId)}/posts`
+                    : "/posts";
+
+                const response = await apiFetch(`${path}?${params.toString()}`);
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Failed to load posts");
+                }
+                if (isCurrent) {
+                    setPosts(data.data.posts || []);
+                    setPagination(data.data.pagination || null);
+                }
+            } catch (err) {
+                if (isCurrent) {
+                    setError(
+                        err.message === "SESSION_EXPIRED"
+                            ? "Your session has expired. Please sign in again."
+                            : (err.message || "Failed to load posts")
+                    );
+                }
+            } finally {
+                if (isCurrent) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        loadPosts();
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [myPosts, authorId, page, canFilter, qParam, timeParam, sortParam]);
 
     const handleClearSearch = () => {
         setSearchParams(prev => {

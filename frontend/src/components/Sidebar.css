@@ -16,8 +16,8 @@
     height: calc(100vh - 64px);
     overflow-y: auto;
     background: #ffffff;
-    border-right: 1px solid var(--color-border);
-    padding: 1.25rem 1rem;
+    border-right: 1px solid var(--color-border, #e8eaed);
+    padding: 1.25rem 0.85rem;
     box-sizing: border-box;
   }
 
@@ -27,12 +27,12 @@
   }
 
   .sidebar-section-title {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: var(--color-text-secondary);
+    color: var(--color-text-secondary, #70757a);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 0 0 0.5rem 0.5rem;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.5rem 0.6rem;
   }
 
   .sidebar-section-title + .sidebar-section-title {
@@ -42,28 +42,74 @@
   .sidebar-list {
     list-style: none;
     padding: 0;
-    margin: 0 0 1.25rem 0;
+    margin: 0 0 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .sidebar-link {
-    display: block;
-    padding: 0.55rem 0.75rem;
-    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+    padding: 6px 10px;
+    border-radius: 10px;
     font-size: 0.925rem;
     font-weight: 500;
-    color: var(--color-text-primary);
+    color: var(--color-text-primary, #202124);
     text-decoration: none;
-    transition: background 0.15s, color 0.15s;
+    background: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    user-select: none;
   }
 
+  /* Rounded icon tile */
+  .sidebar-icon-tile {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f3f4f6;
+    color: #4b5563;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Hover background */
   .sidebar-link:hover {
-    background: var(--color-hover);
-    color: var(--color-primary);
+    background-color: #f9fafb;
+    color: #111827;
   }
 
+  .sidebar-link:hover .sidebar-icon-tile {
+    background-color: #e5e7eb;
+    color: #111827;
+  }
+
+  /* Press (scale) effect */
+  .sidebar-link:active {
+    transform: scale(0.97);
+  }
+
+  /* Active state: light orange background, solid orange icon tile with white icon */
   .sidebar-link.active {
-    background: var(--color-hover);
-    color: var(--color-primary);
+    background-color: #fff7ed;
+    color: #e8590c;
     font-weight: 600;
+  }
+
+  .sidebar-link.active .sidebar-icon-tile {
+    background-color: #e8590c;
+    color: #ffffff;
   }
 }

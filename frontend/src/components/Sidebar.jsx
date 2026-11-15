@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { Sparkles, Users, Compass, FileText, Bookmark } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import "./Sidebar.css";
 
@@ -18,7 +19,10 @@ export default function Sidebar() {
                 `sidebar-link ${isActive ? "active" : ""}`
               }
             >
-              For You
+              <span className="sidebar-icon-tile">
+                <Sparkles size={18} />
+              </span>
+              <span className="sidebar-label">For You</span>
             </NavLink>
           </li>
           <li>
@@ -28,7 +32,10 @@ export default function Sidebar() {
                 `sidebar-link ${isActive ? "active" : ""}`
               }
             >
-              Following
+              <span className="sidebar-icon-tile">
+                <Users size={18} />
+              </span>
+              <span className="sidebar-label">Following</span>
             </NavLink>
           </li>
           <li>
@@ -38,7 +45,10 @@ export default function Sidebar() {
                 `sidebar-link ${isActive ? "active" : ""}`
               }
             >
-              Explore
+              <span className="sidebar-icon-tile">
+                <Compass size={18} />
+              </span>
+              <span className="sidebar-label">Explore</span>
             </NavLink>
           </li>
         </ul>
@@ -54,7 +64,10 @@ export default function Sidebar() {
                     `sidebar-link ${isActive ? "active" : ""}`
                   }
                 >
-                  My Posts
+                  <span className="sidebar-icon-tile">
+                    <FileText size={18} />
+                  </span>
+                  <span className="sidebar-label">My Posts</span>
                 </NavLink>
               </li>
               <li>
@@ -64,7 +77,10 @@ export default function Sidebar() {
                     `sidebar-link ${isActive ? "active" : ""}`
                   }
                 >
-                  Bookmarks
+                  <span className="sidebar-icon-tile">
+                    <Bookmark size={18} />
+                  </span>
+                  <span className="sidebar-label">Bookmarks</span>
                 </NavLink>
               </li>
             </ul>

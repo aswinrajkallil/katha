@@ -382,26 +382,71 @@
   margin-top: 1.25rem;
 }
 
-.drawer-nav ul {
+.drawer-list {
   list-style: none;
   padding: 0;
   margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.drawer-nav li a {
-  display: block;
-  padding: 0.5rem 0.6rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
+.drawer-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.925rem;
+  font-weight: 500;
   color: var(--color-text-primary, #202124);
   text-decoration: none;
-  transition: background-color 0.15s;
+  background: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  user-select: none;
 }
 
-.drawer-nav li a:hover,
-.drawer-nav li a.active {
-  background: var(--color-hover, #f3f4f6);
+.drawer-icon-tile {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f3f4f6;
+  color: #4b5563;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.drawer-label {
+  flex: 1;
+}
+
+.drawer-link:hover {
+  background-color: #f9fafb;
+  color: #111827;
+}
+
+.drawer-link:hover .drawer-icon-tile {
+  background-color: #e5e7eb;
+  color: #111827;
+}
+
+.drawer-link:active {
+  transform: scale(0.97);
+}
+
+.drawer-link.active {
+  background-color: #fff7ed;
   color: #e8590c;
+  font-weight: 600;
+}
+
+.drawer-link.active .drawer-icon-tile {
+  background-color: #e8590c;
+  color: #ffffff;
 }
 
 .drawer-logout {
@@ -482,12 +527,11 @@
 
 .mobile-filter-sheet-footer {
   display: flex;
-  gap: 12px;
   margin-top: 20px;
 }
 
 .filter-reset-outline-btn {
-  flex: 1;
+  width: 100%;
   height: 46px;
   border-radius: 8px;
   background-color: transparent;
@@ -496,15 +540,11 @@
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .filter-reset-outline-btn:hover {
   background-color: var(--color-hover, #f3f4f6);
-}
-
-.mobile-filter-sheet-footer .filter-apply-btn {
-  flex: 1;
-  height: 46px;
 }
 
 /* =========================================
