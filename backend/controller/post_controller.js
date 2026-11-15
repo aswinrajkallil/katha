@@ -3,6 +3,8 @@ import Post from "../models/Post.js";
 import Like from "../models/Like.js";
 import Comment from "../models/Comment.js";
 import Bookmark from "../models/Bookmark.js";
+import cloudinary from "../config/cloudinary.js";
+import uploadToCloudinary from "../utils/cloudinaryUpload.js";
 
 // Helper: validate ObjectId
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -27,6 +29,8 @@ const attachCommentCounts = async (posts) => {
 
 // POST /api/posts — Create a post
 const createPost = async (req, res) => {
+    let uploadedImage = null;
+
     try {
         const { title, content, excerpt, type, videoUrl, tags, status, category } =
             req.body;
@@ -64,12 +68,19 @@ const createPost = async (req, res) => {
             postData.category = category;
         }
 
-        // Handle cover image from file upload
+        // Upload cover image to Cloudinary when a file is provided
         if (req.file) {
-            postData.coverImage = `/uploads/${req.file.filename}`;
+            uploadedImage = await uploadToCloudinary(
+                req.file.buffer,
+                "katha/posts"
+            );
+            postData.coverImage = uploadedImage.url;
+            postData.coverImagePublicId = uploadedImage.publicId;
         }
 
         const post = await Post.create(postData);
+        // The database record now owns this asset; don't remove it in the catch block.
+        uploadedImage = null;
         await post.populate("author", "username email profileImage");
         await post.populate("category", "name slug");
 
@@ -79,6 +90,15 @@ const createPost = async (req, res) => {
             data: post
         });
     } catch (e) {
+        if (uploadedImage?.publicId) {
+            try {
+                await cloudinary.uploader.destroy(uploadedImage.publicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to clean up uploaded post image:", cleanupError);
+            }
+        }
         console.error('createPost error details:', e);
         // Handle Mongoose validation errors
         if (e.name === 'ValidationError') {
@@ -432,6 +452,8 @@ const getPostById = async (req, res) => {
 
 // PUT /api/posts/:id — Update a post
 const updatePost = async (req, res) => {
+    let uploadedImage = null;
+
     try {
         const { id } = req.params;
 
@@ -471,11 +493,33 @@ const updatePost = async (req, res) => {
             post.category = isValidId(category) ? category : null;
         }
 
+        // Upload the replacement first; keep the existing image if upload fails.
+        const previousImagePublicId = post.coverImagePublicId;
+
         if (req.file) {
-            post.coverImage = `/uploads/${req.file.filename}`;
+            uploadedImage = await uploadToCloudinary(
+                req.file.buffer,
+                "katha/posts"
+            );
+            post.coverImage = uploadedImage.url;
+            post.coverImagePublicId = uploadedImage.publicId;
         }
 
         await post.save();
+
+        // The saved post now references the new asset.
+        uploadedImage = null;
+
+        // Remove the previous Cloudinary asset only after the database save succeeds.
+        if (req.file && previousImagePublicId) {
+            try {
+                await cloudinary.uploader.destroy(previousImagePublicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to delete previous post image:", cleanupError);
+            }
+        }
         await post.populate("author", "username profileImage");
         await post.populate("category", "name slug");
 
@@ -485,6 +529,15 @@ const updatePost = async (req, res) => {
             data: post
         });
     } catch (e) {
+        if (uploadedImage?.publicId) {
+            try {
+                await cloudinary.uploader.destroy(uploadedImage.publicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to clean up replacement post image:", cleanupError);
+            }
+        }
         console.error("updatePost error:", e);
         return res.status(500).json({ success: false, message: "Something went wrong" });
     }
@@ -523,6 +576,18 @@ const deletePost = async (req, res) => {
         ]);
 
         await Post.findByIdAndDelete(id);
+
+        // Delete the Cloudinary asset if this post has one.
+        // Legacy local-upload images have no public ID and are left untouched.
+        if (post.coverImagePublicId) {
+            try {
+                await cloudinary.uploader.destroy(post.coverImagePublicId, {
+                    resource_type: "image"
+                });
+            } catch (cleanupError) {
+                console.error("Failed to delete post image from Cloudinary:", cleanupError);
+            }
+        }
 
         return res.status(200).json({
             success: true,
