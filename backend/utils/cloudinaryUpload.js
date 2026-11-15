@@ -15,7 +15,7 @@ const uploadToCloudinary = (fileBuffer, folder = "katha") => {
 
                 resolve({
                     url: result.secure_url,
-                    publicId: result.public_id
+                    publicId: result.public_id 
                 });
             }
         );
