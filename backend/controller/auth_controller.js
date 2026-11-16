@@ -13,10 +13,11 @@ const tokenMatches = (stored, token) => {
     catch { return false; }
 };
 
-const setRefreshCookie = (res, token) => res.cookie("refreshToken", token, {
-    httpOnly: true, secure: process.env.NODE_ENV === "production",
-    sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/"
-});
+const isProd = process.env.NODE_ENV === "production";
+const cookieOpts = { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/" };
+
+const setRefreshCookie = (res, token) =>
+    res.cookie("refreshToken", token, { ...cookieOpts, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
 const checkUsername = async (req, res) => {
     try {
@@ -79,7 +80,7 @@ const refreshAccessToken = async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
         const user = await User.findById(decoded.id);
         if (!user || !tokenMatches(user.refreshToken, token)) {
-            res.clearCookie("refreshToken", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+            res.clearCookie("refreshToken", cookieOpts);
             return res.status(403).json({ success: false, message: "Invalid refresh token" });
         }
         const nextRefresh = generateRefreshToken(user);
@@ -88,7 +89,7 @@ const refreshAccessToken = async (req, res) => {
         setRefreshCookie(res, nextRefresh);
         return res.json({ success: true, data: { accessToken: generateToken(user) } });
     } catch (error) {
-        res.clearCookie("refreshToken", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+        res.clearCookie("refreshToken", cookieOpts);
         return res.status(403).json({ success: false, message: "Invalid or expired refresh token" });
     }
 };
@@ -106,7 +107,7 @@ const logout = async (req, res) => {
                 }
             } catch (_) {}
         }
-        res.clearCookie("refreshToken", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+        res.clearCookie("refreshToken", cookieOpts);
         return res.json({ success: true, message: "Logged out successfully" });
     } catch (error) {
         console.error("logout:", error);
