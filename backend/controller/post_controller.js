@@ -100,6 +100,13 @@ const createPost = async (req, res) => {
             }
         }
         console.error('createPost error details:', e);
+        if (e.code === "CLOUDINARY_CONFIG_MISSING") {
+            return res.status(502).json({
+                success: false,
+                message: e.message || "Cloudinary configuration missing",
+                errorType: "CLOUDINARY_CONFIG_MISSING"
+            });
+        }
         // Handle Mongoose validation errors
         if (e.name === 'ValidationError') {
             const messages = Object.values(e.errors).map(err => err.message).join(', ');
@@ -539,7 +546,14 @@ const updatePost = async (req, res) => {
             }
         }
         console.error("updatePost error:", e);
-        return res.status(500).json({ success: false, message: "Something went wrong" });
+        if (e.code === "CLOUDINARY_CONFIG_MISSING") {
+            return res.status(502).json({
+                success: false,
+                message: e.message || "Cloudinary configuration missing",
+                errorType: "CLOUDINARY_CONFIG_MISSING"
+            });
+        }
+        return res.status(500).json({ success: false, message: e.message || "Something went wrong" });
     }
 };
 

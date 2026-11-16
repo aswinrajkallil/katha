@@ -16,6 +16,7 @@ import apiFetch from "../api/api";
 import PostCard from "../components/Posts/PostCard";
 import UserAvatar from "../components/UserAvatar";
 import HorizontalScroller from "../components/HorizontalScroller";
+import { mediaUrl } from "../utils/media";
 import AuthorStripItem from "../components/AuthorStripItem";
 import SortBar, { buildFeedQueryUrl } from "../components/SortBar";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -301,12 +302,7 @@ export default function Explore() {
 
   // Resolve cover image for trending cards
   const getCoverImageUrl = (coverImage) => {
-    if (!coverImage) return null;
-    if (coverImage.startsWith("data:") || coverImage.startsWith("blob:") || coverImage.startsWith("http")) {
-      return coverImage;
-    }
-    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
-    return `${baseUrl}${coverImage.startsWith("/") ? "" : "/"}${coverImage}`;
+    return mediaUrl(coverImage, { w: 640, h: 360, fit: "fill" });
   };
 
   return (

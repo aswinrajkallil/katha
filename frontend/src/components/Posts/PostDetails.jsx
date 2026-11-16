@@ -18,6 +18,7 @@ import CommentForm from "../Comments/CommentForm";
 import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
 import UserAvatar from "../UserAvatar";
+import { mediaUrl } from "../../utils/media";
 import "./PostDetails.css";
 
 const getRelativeTime = (dateStr) => {
@@ -297,14 +298,7 @@ export default function PostDetails() {
   const canModify = isAuthor || isAdmin;
   const authorUsername = post.author?.username || "anonymous";
 
-  let imageUrl = null;
-  if (post.coverImage) {
-    if (post.coverImage.startsWith("data:") || post.coverImage.startsWith("blob:") || post.coverImage.startsWith("http")) {
-      imageUrl = post.coverImage;
-    } else {
-      imageUrl = `${import.meta.env.VITE_API_URL}${post.coverImage}`;
-    }
-  }
+  const imageUrl = post.coverImage ? mediaUrl(post.coverImage, { w: 1400 }) : null;
 
   const youtubeEmbedUrl = post.videoUrl ? getYouTubeEmbedUrl(post.videoUrl) : null;
 
@@ -370,7 +364,7 @@ export default function PostDetails() {
               style={{ backgroundImage: `url(${imageUrl})` }}
               aria-hidden="true"
             />
-            <img src={imageUrl} alt={post.title} className="post-details-media-img" />
+            <img src={imageUrl} alt={post.title} className="post-details-media-img" loading="lazy" decoding="async" />
           </div>
         )}
 

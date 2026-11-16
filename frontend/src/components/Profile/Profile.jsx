@@ -5,8 +5,7 @@ import apiFetch from "../../api/api";
 import PostList from "../Posts/PostList";
 import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
+import { mediaUrl } from "../../utils/media";
 
 export default function Profile() {
     const { id } = useParams();
@@ -68,10 +67,10 @@ export default function Profile() {
     return <main style={{ maxWidth: 900, margin: "32px auto", padding: 20 }}>
         <BackButton />
         <section style={{ border: "1px solid #ddd", borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
-            <div style={{ height: 180, background: "#eee", backgroundImage: profile.coverImage ? `url(${API_URL}${profile.coverImage})` : "linear-gradient(120deg,#202938,#64748b)", backgroundSize: "cover", backgroundPosition: "center" }} />
+            <div style={{ height: 180, background: "#eee", backgroundImage: profile.coverImage ? `url(${mediaUrl(profile.coverImage, { w: 1200, h: 400, fit: "fill" })})` : "linear-gradient(120deg,#202938,#64748b)", backgroundSize: "cover", backgroundPosition: "center" }} />
             <div style={{ padding: 22 }}>
                 <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
-                    {profile.profileImage ? <img src={`${API_URL}${profile.profileImage}`} alt="" style={{ width: 100, height: 100, borderRadius: "50%", objectFit: "cover", border: "4px solid white", marginTop: -58, background: "#fff" }} /> :
+                    {profile.profileImage ? <img src={mediaUrl(profile.profileImage, { w: 200, h: 200, fit: "fill" })} alt="" loading="lazy" decoding="async" style={{ width: 100, height: 100, borderRadius: "50%", objectFit: "cover", border: "4px solid white", marginTop: -58, background: "#fff" }} /> :
                         <div style={{ width: 100, height: 100, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 36, background: "#ddd", marginTop: -58 }}>{(profile.username || "?")[0].toUpperCase()}</div>}
                     <div style={{ flex: 1, minWidth: 180 }}>
                         <h1 style={{ margin: "0 0 4px" }}>{profile.fullName || profile.username}</h1>

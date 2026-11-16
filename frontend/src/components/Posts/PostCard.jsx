@@ -16,6 +16,7 @@ import { useToast } from "../../context/ToastContext";
 import apiFetch from "../../api/api";
 import ConfirmDialog from "../ConfirmDialog";
 import UserAvatar from "../UserAvatar";
+import { mediaUrl } from "../../utils/media";
 import "./PostCard.css";
 
 const getRelativeTime = (dateStr) => {
@@ -64,14 +65,7 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
   const authorUsername = post.author?.username || "anonymous";
 
   // Resolve cover image URL (handles local upload path, external URL, or blob/preview)
-  let imageUrl = null;
-  if (post.coverImage) {
-    if (post.coverImage.startsWith("data:") || post.coverImage.startsWith("blob:") || post.coverImage.startsWith("http")) {
-      imageUrl = post.coverImage;
-    } else {
-      imageUrl = `${import.meta.env.VITE_API_URL}${post.coverImage}`;
-    }
-  }
+  const imageUrl = post.coverImage ? mediaUrl(post.coverImage, { w: 1000 }) : null;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -332,6 +326,7 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
                   alt={post.title}
                   className="reddit-media-foreground"
                   loading="lazy"
+                  decoding="async"
                 />
                 {/* Video Overlay with exact hit-target Play Button */}
                 {isVideo && (

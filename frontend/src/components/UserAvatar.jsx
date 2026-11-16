@@ -1,11 +1,5 @@
 import React from "react";
-
-const getAvatarUrl = (img) => {
-  if (!img) return null;
-  if (img.startsWith("http://") || img.startsWith("https://")) return img;
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
-  return `${baseUrl}${img.startsWith("/") ? "" : "/"}${img}`;
-};
+import { mediaUrl } from "../utils/media";
 
 // Generates consistent soft background color from username
 const getFallbackColor = (name) => {
@@ -31,7 +25,7 @@ export default function UserAvatar({ user, profileImage, username, size = 28, cl
   const img = profileImage || user?.profileImage;
   const name = username || user?.username || user?.fullName || "User";
   const initial = (name[0] || "U").toUpperCase();
-  const url = getAvatarUrl(img);
+  const url = img ? mediaUrl(img, { w: size * 2, h: size * 2, fit: "fill" }) : null;
   const colors = getFallbackColor(name);
 
   const style = {
@@ -49,6 +43,8 @@ export default function UserAvatar({ user, profileImage, username, size = 28, cl
         src={url}
         alt={name}
         className={`user-avatar-img ${className}`.trim()}
+        loading="lazy"
+        decoding="async"
         style={{
           ...style,
           objectFit: "cover",
