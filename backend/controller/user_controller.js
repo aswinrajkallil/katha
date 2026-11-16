@@ -3,6 +3,7 @@ import Follow from "../models/Follow.js";
 import Post from "../models/Post.js";
 import mongoose from "mongoose";
 import uploadToCloudinary from "../utils/cloudinaryUpload.js";
+import cloudinary from "../config/cloudinary.js";
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const publicFields = "username fullName profileImage coverImage bio location website createdAt";
@@ -49,7 +50,7 @@ const updateProfile = async (req, res) => {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        const allowed = ["username", "fullName", "bio", "location", "website"];
+        const allowed = ["fullName", "bio", "location", "website"];
         for (const field of allowed) {
             if (req.body[field] !== undefined) {
                 if (typeof req.body[field] !== "string") {
@@ -59,17 +60,90 @@ const updateProfile = async (req, res) => {
             }
         }
 
-        if (user.username && !/^[a-zA-Z0-9_]{3,30}$/.test(user.username)) {
-            return res.status(400).json({ success: false, message: "Username must be 3–30 characters using letters, numbers or underscores" });
+        // Align username rules with register and check-username: lowercase letters, numbers, underscores, dots; 3-30
+        if (req.body.username !== undefined) {
+            if (typeof req.body.username !== "string") {
+                return res.status(400).json({ success: false, message: "Username must be text" });
+            }
+            const normalized = req.body.username.trim().toLowerCase();
+            if (!/^[a-z0-9_.]{3,30}$/.test(normalized)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Username must be 3–30 characters using lowercase letters, numbers, underscores or dots"
+                });
+            }
+            if (normalized !== user.username) {
+                const existing = await User.findOne({ username: normalized, _id: { $ne: user._id } }).select("_id");
+                if (existing) {
+                    return res.status(409).json({ success: false, message: "That username is already taken" });
+                }
+                user.username = normalized;
+            }
         }
-        if (typeof user.bio === "string" && user.bio.length > 300) return res.status(400).json({ success: false, message: "Bio cannot exceed 300 characters" });
+
+        if (typeof user.bio === "string" && user.bio.length > 300) {
+            return res.status(400).json({ success: false, message: "Bio cannot exceed 300 characters" });
+        }
         if (user.website && !/^https?:\/\//i.test(user.website)) {
             return res.status(400).json({ success: false, message: "Website must start with http:// or https://" });
         }
 
-        if (req.file) {
-            const uploaded = await uploadToCloudinary(req.file.buffer, "katha/profiles");
+        // Extract files from upload.fields or backward-compatible upload.single
+        const profileImageFile = req.files?.profileImage?.[0] || (req.file?.fieldname === "profileImage" ? req.file : null);
+        const coverImageFile = req.files?.coverImage?.[0] || (req.file?.fieldname === "coverImage" ? req.file : null);
+
+        // Handle profile image removal
+        const removeProfile = req.body.removeProfileImage === "true" || req.body.removeProfileImage === true || req.body.removeProfileImage === "1";
+        if (removeProfile) {
+            if (user.profileImagePublicId) {
+                try {
+                    await cloudinary.uploader.destroy(user.profileImagePublicId);
+                } catch (err) {
+                    console.error("Failed to destroy removed profile image:", err);
+                }
+            }
+            user.profileImage = null;
+            user.profileImagePublicId = null;
+        } else if (profileImageFile) {
+            const previousPublicId = user.profileImagePublicId;
+            const uploaded = await uploadToCloudinary(profileImageFile.buffer, "katha/profiles");
             user.profileImage = uploaded.url;
+            user.profileImagePublicId = uploaded.publicId;
+
+            if (previousPublicId && previousPublicId !== uploaded.publicId) {
+                try {
+                    await cloudinary.uploader.destroy(previousPublicId);
+                } catch (err) {
+                    console.error("Failed to destroy previous profile image:", err);
+                }
+            }
+        }
+
+        // Handle cover image removal
+        const removeCover = req.body.removeCoverImage === "true" || req.body.removeCoverImage === true || req.body.removeCoverImage === "1";
+        if (removeCover) {
+            if (user.coverImagePublicId) {
+                try {
+                    await cloudinary.uploader.destroy(user.coverImagePublicId);
+                } catch (err) {
+                    console.error("Failed to destroy removed cover image:", err);
+                }
+            }
+            user.coverImage = null;
+            user.coverImagePublicId = null;
+        } else if (coverImageFile) {
+            const previousPublicId = user.coverImagePublicId;
+            const uploaded = await uploadToCloudinary(coverImageFile.buffer, "katha/covers");
+            user.coverImage = uploaded.url;
+            user.coverImagePublicId = uploaded.publicId;
+
+            if (previousPublicId && previousPublicId !== uploaded.publicId) {
+                try {
+                    await cloudinary.uploader.destroy(previousPublicId);
+                } catch (err) {
+                    console.error("Failed to destroy previous cover image:", err);
+                }
+            }
         }
 
         await user.save();
@@ -89,11 +163,28 @@ const updateProfile = async (req, res) => {
 const updateCoverImage = async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: "Cover image is required" });
-        const uploaded = await uploadToCloudinary(req.file.buffer, "katha/covers");
-        const user = await User.findByIdAndUpdate(req.user.id, { coverImage: uploaded.url }, { new: true })
-            .select("-password -refreshToken");
+        const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
-        return res.json({ success: true, message: "Cover image updated", data: user });
+
+        const previousPublicId = user.coverImagePublicId;
+        const uploaded = await uploadToCloudinary(req.file.buffer, "katha/covers");
+
+        user.coverImage = uploaded.url;
+        user.coverImagePublicId = uploaded.publicId;
+        await user.save();
+
+        if (previousPublicId && previousPublicId !== uploaded.publicId) {
+            try {
+                await cloudinary.uploader.destroy(previousPublicId);
+            } catch (err) {
+                console.error("Failed to destroy previous cover image:", err);
+            }
+        }
+
+        const data = user.toObject();
+        delete data.password;
+        delete data.refreshToken;
+        return res.json({ success: true, message: "Cover image updated", data });
     } catch (error) {
         console.error("updateCoverImage:", error);
         const status = error.code === "CLOUDINARY_CONFIG_MISSING" ? 502 : 500;

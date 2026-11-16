@@ -1,0 +1,541 @@
+/* =========================================
+   PREMIUM EDIT PROFILE STYLES
+========================================= */
+
+.edit-profile-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 16px 80px;
+  width: 100%;
+}
+
+.edit-profile-top-bar {
+  padding: 16px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.edit-profile-heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #202124);
+  margin-bottom: 20px;
+}
+
+/* =========================================
+   LIVE PREVIEW HEADER (Facebook / Instagram)
+========================================= */
+
+.edit-profile-preview-card {
+  background: var(--color-bg-primary, #ffffff);
+  border: 1px solid var(--color-border, #e8eaed);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  margin-bottom: 28px;
+}
+
+.edit-cover-dropzone {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  min-height: 180px;
+  max-height: 280px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-border, #e8eaed);
+  transition: opacity 0.2s ease;
+}
+
+.edit-cover-dropzone.drag-active {
+  outline: 3px dashed var(--color-primary, #e8590c);
+  outline-offset: -4px;
+}
+
+.edit-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.edit-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  backdrop-filter: blur(2px);
+}
+
+.edit-cover-dropzone:hover .edit-cover-overlay,
+.edit-cover-dropzone:focus-visible .edit-cover-overlay {
+  opacity: 1;
+}
+
+.edit-cover-remove-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease;
+  z-index: 5;
+}
+
+.edit-cover-remove-btn:hover {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+/* =========================================
+   AVATAR SECTION IN PREVIEW
+========================================= */
+
+.edit-avatar-section {
+  padding: 0 24px 20px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.edit-avatar-wrapper {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid #ffffff;
+  background-color: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  margin-top: -60px;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.edit-avatar-wrapper.drag-active {
+  outline: 3px dashed var(--color-primary, #e8590c);
+  outline-offset: -4px;
+}
+
+.edit-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.edit-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+  font-weight: 700;
+  background: #ffedd5;
+  color: #e8590c;
+  user-select: none;
+}
+
+.edit-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  border-radius: 50%;
+}
+
+.edit-avatar-wrapper:hover .edit-avatar-overlay,
+.edit-avatar-wrapper:focus-visible .edit-avatar-overlay {
+  opacity: 1;
+}
+
+.edit-avatar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-photo-btn {
+  background: var(--color-bg-secondary, #f7f8fa);
+  border: 1px solid var(--color-border, #e8eaed);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #202124);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+
+.edit-photo-btn:hover {
+  background: #ebecef;
+}
+
+.edit-photo-btn.danger {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.edit-photo-btn.danger:hover {
+  background: #fee2e2;
+}
+
+/* =========================================
+   FLOATING LABEL FORM INPUTS
+========================================= */
+
+.edit-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.floating-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.floating-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.floating-input,
+.floating-textarea {
+  width: 100%;
+  padding: 24px 16px 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--color-text-primary, #202124);
+  background-color: var(--color-bg-primary, #ffffff);
+  border: 1.5px solid var(--color-border, #e8eaed);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.floating-textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.5;
+}
+
+.floating-input:focus,
+.floating-textarea:focus {
+  border-color: var(--color-primary, #e8590c);
+  box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.12);
+}
+
+.floating-input.has-error,
+.floating-textarea.has-error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.floating-label {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  font-size: 0.95rem;
+  color: var(--color-text-secondary, #70757a);
+  pointer-events: none;
+  transition: all 0.2s ease;
+  transform-origin: left top;
+}
+
+/* Float label to top when focused or populated */
+.floating-input:focus ~ .floating-label,
+.floating-input:not(:placeholder-shown) ~ .floating-label,
+.floating-textarea:focus ~ .floating-label,
+.floating-textarea:not(:placeholder-shown) ~ .floating-label {
+  transform: translateY(-8px) scale(0.78);
+  color: var(--color-primary, #e8590c);
+  font-weight: 600;
+}
+
+.floating-input.has-error ~ .floating-label {
+  color: #dc2626;
+}
+
+.floating-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 0 4px;
+  font-size: 0.8rem;
+}
+
+.floating-status-msg {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.floating-status-msg.error {
+  color: #dc2626;
+}
+
+.floating-status-msg.success {
+  color: #16a34a;
+}
+
+.floating-status-msg.info {
+  color: var(--color-text-secondary, #70757a);
+}
+
+.floating-char-counter {
+  color: var(--color-text-secondary, #70757a);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+/* =========================================
+   STICKY BOTTOM SAVE BAR
+========================================= */
+
+.edit-profile-save-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--color-border, #e8eaed);
+  padding: 14px 20px;
+  margin: 32px -16px -80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 40;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.edit-save-bar-info {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary, #70757a);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary, #e8590c);
+  display: inline-block;
+}
+
+.edit-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.edit-cancel-btn {
+  background: none;
+  border: 1px solid var(--color-border, #e8eaed);
+  border-radius: 9999px;
+  padding: 9px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #202124);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.edit-cancel-btn:hover {
+  background: var(--color-hover, #f3f4f6);
+}
+
+.edit-submit-btn {
+  background: var(--color-primary, #e8590c);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 9px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.edit-submit-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark, #c94a06);
+}
+
+.edit-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =========================================
+   IN-BROWSER CROP MODAL (react-easy-crop)
+========================================= */
+
+.crop-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.crop-modal-card {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 600px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.crop-modal-header {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border, #e8eaed);
+}
+
+.crop-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #202124);
+  margin: 0;
+}
+
+.crop-modal-close-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary, #70757a);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.crop-modal-close-btn:hover {
+  background: var(--color-hover, #f3f4f6);
+  color: var(--color-text-primary, #202124);
+}
+
+.crop-area-container {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  background: #111827;
+}
+
+.crop-controls {
+  padding: 16px 20px;
+  background: var(--color-bg-secondary, #f7f8fa);
+  border-top: 1px solid var(--color-border, #e8eaed);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.crop-zoom-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-secondary, #70757a);
+}
+
+.crop-zoom-slider {
+  flex: 1;
+  accent-color: var(--color-primary, #e8590c);
+  cursor: pointer;
+}
+
+.crop-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .edit-avatar-section {
+    padding: 0 16px 16px;
+  }
+
+  .edit-avatar-wrapper {
+    width: 96px;
+    height: 96px;
+    margin-top: -48px;
+  }
+
+  .crop-area-container {
+    height: 260px;
+  }
+
+  .edit-profile-save-bar {
+    padding: 12px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-label,
+  .floating-input,
+  .floating-textarea,
+  .edit-cover-overlay,
+  .edit-avatar-overlay,
+  .crop-modal-backdrop {
+    transition: none !important;
+    animation: none !important;
+  }
+}

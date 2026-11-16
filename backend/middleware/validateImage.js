@@ -8,41 +8,60 @@ const signatures = [
 ];
 
 const validateImage = async (req, res, next) => {
-    if (!req.file) return next();
-    try {
-        let header;
-        if (req.file.buffer) {
-            header = req.file.buffer.subarray(0, 16);
-        } else if (req.file.path) {
-            const handle = await fs.open(req.file.path, "r");
-            const buffer = Buffer.alloc(16);
-            const { bytesRead } = await handle.read(buffer, 0, 16, 0);
-            await handle.close();
-            header = buffer.subarray(0, bytesRead);
-        } else {
-            return res.status(400).json({
-                success: false,
-                message: "No file content received for image validation",
-                errorType: "EMPTY_FILE"
+    const files = [];
+    if (req.file) {
+        files.push(req.file);
+    } else if (req.files) {
+        if (Array.isArray(req.files)) {
+            files.push(...req.files);
+        } else if (typeof req.files === "object") {
+            Object.values(req.files).forEach((fList) => {
+                if (Array.isArray(fList)) files.push(...fList);
+                else if (fList) files.push(fList);
             });
         }
+    }
 
-        const valid = signatures.some(item => item.mime === req.file.mimetype && item.test(header));
-        if (!valid) {
-            if (req.file.path) {
-                await fs.unlink(req.file.path).catch(() => {});
+    if (!files.length) return next();
+
+    try {
+        for (const file of files) {
+            let header;
+            if (file.buffer) {
+                header = file.buffer.subarray(0, 16);
+            } else if (file.path) {
+                const handle = await fs.open(file.path, "r");
+                const buffer = Buffer.alloc(16);
+                const { bytesRead } = await handle.read(buffer, 0, 16, 0);
+                await handle.close();
+                header = buffer.subarray(0, bytesRead);
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: "No file content received for image validation",
+                    errorType: "EMPTY_FILE"
+                });
             }
-            return res.status(400).json({
-                success: false,
-                message: "Uploaded file content does not match a supported image format",
-                errorType: "INVALID_IMAGE_SIGNATURE"
-            });
+
+            const valid = signatures.some(item => item.mime === file.mimetype && item.test(header));
+            if (!valid) {
+                if (file.path) {
+                    await fs.unlink(file.path).catch(() => {});
+                }
+                return res.status(400).json({
+                    success: false,
+                    message: "Uploaded file content does not match a supported image format",
+                    errorType: "INVALID_IMAGE_SIGNATURE"
+                });
+            }
         }
         next();
     } catch (error) {
         console.error("validateImage error:", error);
-        if (req.file?.path) {
-            await fs.unlink(req.file.path).catch(() => {});
+        for (const file of files) {
+            if (file?.path) {
+                await fs.unlink(file.path).catch(() => {});
+            }
         }
         return res.status(400).json({
             success: false,

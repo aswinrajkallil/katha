@@ -15,7 +15,7 @@ import validateImage from "../middleware/validateImage.js";
 const router = express.Router();
 
 router.get("/profile", authenticate, getMyProfile);
-router.put("/profile", authenticate, upload.single("profileImage"), validateImage, updateProfile);
+router.put("/profile", authenticate, upload.fields([{ name: "profileImage", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]), validateImage, updateProfile);
 router.put("/profile/cover", authenticate, upload.single("coverImage"), validateImage, updateCoverImage);
 router.get("/suggestions", authenticate, getSuggestedUsers);
 router.get("/:id/posts", getUserPosts);

@@ -10,11 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
     "axios": "^1.21.1",
     "lucide-react": "^1.73.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.4"
+    "react-easy-crop": "^6.2.5",
+    "react-router-dom": "^7.18.4",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
