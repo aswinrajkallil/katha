@@ -47,4 +47,13 @@ const deleteNotification = async (req, res) => {
     } catch (error) { return res.status(500).json({ success: false, message: "Unable to delete notification" }); }
 };
 
-export { listNotifications, markNotificationRead, markAllRead, deleteNotification };
+const getUnreadCount = async (req, res) => {
+    try {
+        const count = await Notification.countDocuments({ recipient: req.user.id, isRead: false });
+        return res.json({ success: true, data: { count } });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: "Unable to count notifications" });
+    }
+};
+
+export { listNotifications, getUnreadCount, markNotificationRead, markAllRead, deleteNotification };

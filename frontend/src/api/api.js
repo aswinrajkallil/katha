@@ -9,14 +9,21 @@ const refreshAccessToken = async () => {
             credentials: "include"
         })
             .then(async (response) => {
-                if (!response.ok) {
+                // Only delete the stored accessToken when the server actually rejects the refresh (401/403)
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem("accessToken");
                     throw new Error("SESSION_EXPIRED");
                 }
+                if (!response.ok) {
+                    // Cold start or server transient error - preserve existing token
+                    throw new Error("REFRESH_FAILED");
+                }
 
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
                 const token = data.data?.accessToken || data.accessToken;
 
                 if (!token) {
+                    localStorage.removeItem("accessToken");
                     throw new Error("SESSION_EXPIRED");
                 }
 
@@ -24,7 +31,7 @@ const refreshAccessToken = async () => {
                 return token;
             })
             .catch((error) => {
-                localStorage.removeItem("accessToken");
+                // Never clear accessToken on network errors or cold starts
                 throw error;
             })
             .finally(() => {
@@ -58,7 +65,8 @@ const apiFetch = async (path, options = {}) => {
         return fetch(`${API_URL}/api${path}`, {
             ...options,
             credentials: "include",
-            headers
+            headers,
+            signal: options.signal
         });
     };
 
@@ -77,6 +85,22 @@ const apiFetch = async (path, options = {}) => {
         : await refreshAccessToken();
     response = await sendRequest(newAccessToken);
     return response;
+};
+
+/**
+ * Fetcher helper for react-query queries:
+ * Passes AbortSignal and throws on non-OK responses with the server error message.
+ */
+export const apiQuery = async (path, options = {}) => {
+    const res = await apiFetch(path, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+        const err = new Error(data.message || `Request failed (${res.status})`);
+        err.status = res.status;
+        err.data = data;
+        throw err;
+    }
+    return data.data !== undefined ? data.data : data;
 };
 
 export default apiFetch;

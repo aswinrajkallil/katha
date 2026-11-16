@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Heart,
   Bookmark,
@@ -12,7 +13,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import apiFetch from "../../api/api";
+import apiFetch, { apiQuery } from "../../api/api";
+import { queryKeys, patchPostEverywhere } from "../../api/queryClient";
 import CommentList from "../Comments/CommentList";
 import CommentForm from "../Comments/CommentForm";
 import BackButton from "../BackButton";
@@ -50,146 +52,96 @@ export default function PostDetails() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
-  const [post, setPost] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [likes, setLikes] = useState(0);
-  const [userLiked, setUserLiked] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
-  const [likeLoading, setLikeLoading] = useState(false);
-  const [bookmarkLoading, setBookmarkLoading] = useState(false);
-  const [comments, setComments] = useState([]);
-  const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsSort, setCommentsSort] = useState("best");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const fetchComments = useCallback(async (sort = commentsSort) => {
-    setCommentsLoading(true);
-    try {
-      const res = await apiFetch(`/posts/${id}/comments?sort=${sort}`);
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setComments(data.data || []);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setCommentsLoading(false);
-    }
-  }, [id, commentsSort]);
+  // 1. Single query for Post + likesCount + commentsCount + likedByMe + bookmarkedByMe
+  const {
+    data: post,
+    isLoading: loading,
+    error: postError,
+  } = useQuery({
+    queryKey: queryKeys.post(id),
+    queryFn: () => apiQuery(`/posts/${id}`),
+    staleTime: 60 * 1000,
+  });
 
-  useEffect(() => {
-    let active = true;
+  // 2. Query for Comments
+  const {
+    data: comments = [],
+    isLoading: commentsLoading,
+  } = useQuery({
+    queryKey: queryKeys.comments(id, commentsSort),
+    queryFn: () => apiQuery(`/posts/${id}/comments?sort=${commentsSort}`),
+    staleTime: 60 * 1000,
+  });
 
-    const fetchPost = async () => {
-      try {
-        const res = await apiFetch(`/posts/${id}`);
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.message || "Post not found");
-        }
-        if (active) setPost(data.data);
-      } catch (e) {
-        if (active) setError(e.message || "Failed to load post");
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+  const likes = post?.likesCount ?? 0;
+  const userLiked = Boolean(post?.likedByMe);
+  const bookmarked = Boolean(post?.bookmarkedByMe);
+  const error = postError ? postError.message : "";
 
-    const fetchLikes = async () => {
-      try {
-        const res = await apiFetch(`/posts/${id}/likes`);
-        const data = await res.json();
-        if (active && data.success) {
-          setLikes(data.data.likes || 0);
-          setUserLiked(Boolean(data.data.userLiked));
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    fetchPost();
-    fetchLikes();
-    fetchComments();
-
-    return () => {
-      active = false;
-    };
-  }, [id, fetchComments]);
-
-  useEffect(() => {
-    let active = true;
-
-    const fetchBookmarkStatus = async () => {
-      if (!user?._id && !user?.id) {
-        setBookmarked(false);
-        return;
-      }
-
-      try {
-        const res = await apiFetch(`/posts/${id}/bookmark`);
-        const data = await res.json();
-        if (active && res.ok && data.success) {
-          setBookmarked(Boolean(data.data.bookmarked));
-        }
-      } catch {
-        if (active) setBookmarked(false);
-      }
-    };
-
-    fetchBookmarkStatus();
-    return () => {
-      active = false;
-    };
-  }, [id, user]);
-
+  // Optimistic Like Handler
   const handleLike = async () => {
     if (!user) {
       navigate("/login");
       return;
     }
-    if (likeLoading) return;
+    const prevLiked = userLiked;
+    const prevCount = likes;
+    const nextLiked = !prevLiked;
+    const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
 
-    setLikeLoading(true);
+    patchPostEverywhere(queryClient, id, (p) => ({
+      ...p,
+      likedByMe: nextLiked,
+      likesCount: nextCount,
+    }));
+
     try {
-      const method = userLiked ? "DELETE" : "POST";
+      const method = prevLiked ? "DELETE" : "POST";
       const res = await apiFetch(`/posts/${id}/like`, { method });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setLikes(data.data.likes);
-        setUserLiked(method === "POST");
-      }
+      if (!res.ok) throw new Error("Like failed");
     } catch {
+      // Rollback
+      patchPostEverywhere(queryClient, id, (p) => ({
+        ...p,
+        likedByMe: prevLiked,
+        likesCount: prevCount,
+      }));
       toast.error("Failed to update like");
-    } finally {
-      setLikeLoading(false);
     }
   };
 
+  // Optimistic Bookmark Handler
   const handleBookmark = async () => {
     if (!user) {
       navigate("/login");
       return;
     }
-    if (bookmarkLoading) return;
+    const prevBookmarked = bookmarked;
+    const nextBookmarked = !prevBookmarked;
 
-    setBookmarkLoading(true);
+    patchPostEverywhere(queryClient, id, (p) => ({
+      ...p,
+      bookmarkedByMe: nextBookmarked,
+    }));
+
     try {
-      const method = bookmarked ? "DELETE" : "POST";
+      const method = nextBookmarked ? "POST" : "DELETE";
       const res = await apiFetch(`/posts/${id}/bookmark`, { method });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const next = method === "POST";
-        setBookmarked(next);
-        toast.success(next ? "Saved to Bookmarks" : "Removed from Bookmarks");
-      }
+      if (!res.ok) throw new Error("Bookmark failed");
+      toast.success(nextBookmarked ? "Saved to Bookmarks" : "Removed from Bookmarks");
     } catch {
+      // Rollback
+      patchPostEverywhere(queryClient, id, (p) => ({
+        ...p,
+        bookmarkedByMe: prevBookmarked,
+      }));
       toast.error("Failed to update bookmark");
-    } finally {
-      setBookmarkLoading(false);
     }
   };
 
@@ -207,65 +159,47 @@ export default function PostDetails() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     setDeleting(true);
     try {
       const res = await apiFetch(`/posts/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Post deleted successfully");
-        navigate("/my-posts");
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.message || "Failed to delete post");
-      }
+      if (!res.ok) throw new Error("Delete failed");
+      toast.success("Post deleted successfully");
+      queryClient.removeQueries({ queryKey: queryKeys.post(id) });
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+      navigate("/");
     } catch {
-      toast.error("Something went wrong");
+      toast.error("Something went wrong while deleting");
     } finally {
       setDeleting(false);
+      setConfirmDelete(false);
     }
+  };
+
+  const handleCommentAdded = () => {
+    queryClient.invalidateQueries({ queryKey: ["comments", id] });
+    patchPostEverywhere(queryClient, id, (p) => ({
+      ...p,
+      commentsCount: (p.commentsCount || 0) + 1,
+    }));
+  };
+
+  const handleCommentUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ["comments", id] });
+  };
+
+  const handleCommentDeleted = () => {
+    queryClient.invalidateQueries({ queryKey: ["comments", id] });
+    patchPostEverywhere(queryClient, id, (p) => ({
+      ...p,
+      commentsCount: Math.max(0, (p.commentsCount || 1) - 1),
+    }));
   };
 
   const handleSortChange = (newSort) => {
     setCommentsSort(newSort);
-    fetchComments(newSort);
-  };
-
-  const handleCommentAdded = (newComment) => {
-    setComments((prev) => {
-      if (prev.some((c) => c._id === newComment._id)) return prev;
-      return [newComment, ...prev];
-    });
-    setPost((prev) => (prev ? { ...prev, commentsCount: (prev.commentsCount || 0) + 1 } : prev));
-  };
-
-  const handleCommentUpdated = (updatedComment) => {
-    setComments((prev) =>
-      prev.map((c) => (c._id === updatedComment._id ? { ...c, ...updatedComment } : c))
-    );
-  };
-
-  const handleCommentDeleted = (commentId, softDeleted) => {
-    if (softDeleted) {
-      setComments((prev) =>
-        prev.map((c) =>
-          c._id === commentId
-            ? {
-                ...c,
-                content: "[deleted]",
-                author: { _id: null, username: "[deleted]", fullName: "[deleted]", profileImage: null },
-                likesCount: 0,
-                likedByMe: false,
-                isDeleted: true,
-              }
-            : c
-        )
-      );
-    } else {
-      setComments((prev) => prev.filter((c) => c._id !== commentId));
-      setPost((prev) =>
-        prev ? { ...prev, commentsCount: Math.max(0, (prev.commentsCount || 0) - 1) } : prev
-      );
-    }
   };
 
   if (loading) {
@@ -427,7 +361,6 @@ export default function PostDetails() {
             type="button"
             className={`reddit-action-pill ${bookmarked ? "bookmarked" : ""}`}
             onClick={handleBookmark}
-            disabled={bookmarkLoading}
             aria-label="Save post"
           >
             <Bookmark size={16} fill={bookmarked ? "#e8590c" : "none"} color={bookmarked ? "#e8590c" : "currentColor"} />

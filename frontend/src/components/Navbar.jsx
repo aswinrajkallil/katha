@@ -1,11 +1,15 @@
 import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Search, Bell, SlidersHorizontal, X } from "lucide-react";
 import "./Navbar.css";
 import logoFull from "../assets/katha-logo-full.svg";
 import { useAuth } from "../context/AuthContext";
 import { getRouteInfo } from "../routes/routeConfig";
 import { useNavigationGuard } from "../context/NavigationGuardContext";
+import { queryKeys } from "../api/queryClient";
+import { apiQuery } from "../api/api";
+import UserAvatar from "./UserAvatar";
 
 const dateOptions = [
   ["", "All time"],
@@ -28,6 +32,15 @@ export default function Navbar() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { triggerGuard } = useNavigationGuard();
+
+  const { data: unreadData } = useQuery({
+    queryKey: queryKeys.unreadCount(),
+    queryFn: () => apiQuery("/notifications/unread-count"),
+    enabled: Boolean(user),
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+  });
+  const unreadCount = unreadData?.count ?? 0;
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -350,15 +363,17 @@ export default function Navbar() {
 
                 <Link to="/notifications" className="icon-btn" aria-label="Notifications">
                   <Bell size={20} />
-                  <span className="notif-badge"></span>
+                  {unreadCount > 0 && (
+                    <span className="notif-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                  )}
                 </Link>
 
                 <Link
                   to={`/profile/${user.username || user._id}`}
-                  className="avatar-link"
+                  style={{ display: "inline-flex", textDecoration: "none" }}
                   aria-label="Profile"
                 >
-                  {user.username?.[0]?.toUpperCase() || "U"}
+                  <UserAvatar user={user} size={32} />
                 </Link>
               </>
             ) : (
@@ -419,7 +434,9 @@ export default function Navbar() {
               aria-label="Notifications"
             >
               <Bell size={20} color="#111111" />
-              <span className="notif-badge"></span>
+              {unreadCount > 0 && (
+                <span className="notif-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+              )}
             </Link>
           </div>
         </div>

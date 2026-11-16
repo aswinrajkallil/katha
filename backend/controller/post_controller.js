@@ -9,20 +9,36 @@ import uploadToCloudinary from "../utils/cloudinaryUpload.js";
 // Helper: validate ObjectId
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-// Helper: attach real comment counts to an array of posts
-const attachCommentCounts = async (posts) => {
+// Helper: attach real comment and like counts to an array of posts
+const attachCommentCounts = async (posts, userId = null) => {
     if (!posts || !posts.length) return [];
     const postIds = posts.map(p => p._id);
-    const counts = await Comment.aggregate([
-        { $match: { post: { $in: postIds } } },
-        { $group: { _id: "$post", count: { $sum: 1 } } }
+    const [commentCounts, likeCounts, userLikes, userBookmarks] = await Promise.all([
+        Comment.aggregate([
+            { $match: { post: { $in: postIds } } },
+            { $group: { _id: "$post", count: { $sum: 1 } } }
+        ]),
+        Like.aggregate([
+            { $match: { post: { $in: postIds } } },
+            { $group: { _id: "$post", count: { $sum: 1 } } }
+        ]),
+        userId ? Like.find({ post: { $in: postIds }, user: userId }).select("post").lean() : [],
+        userId ? Bookmark.find({ post: { $in: postIds }, user: userId }).select("post").lean() : []
     ]);
-    const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
+    const commentMap = new Map(commentCounts.map(c => [c._id.toString(), c.count]));
+    const likeMap = new Map(likeCounts.map(l => [l._id.toString(), l.count]));
+    const likedSet = new Set(userLikes.map(l => l.post.toString()));
+    const bookmarkedSet = new Set(userBookmarks.map(b => b.post.toString()));
+
     return posts.map(p => {
         const obj = typeof p.toObject === "function" ? p.toObject() : { ...p };
+        const idStr = obj._id.toString();
         return {
             ...obj,
-            commentsCount: countMap.get(obj._id.toString()) || 0
+            commentsCount: commentMap.get(idStr) || 0,
+            likesCount: likeMap.get(idStr) || 0,
+            likedByMe: likedSet.has(idStr),
+            bookmarkedByMe: bookmarkedSet.has(idStr)
         };
     });
 };
@@ -245,7 +261,7 @@ const getPosts = async (req, res) => {
                 .populate("category", "name slug").sort(sort).skip(skip).limit(limitNum);
         }
 
-        const postsWithCounts = await attachCommentCounts(posts);
+        const postsWithCounts = await attachCommentCounts(posts, req.user?.id);
 
         return res.status(200).json({
             success: true,
@@ -285,7 +301,7 @@ const getMyPosts = async (req, res) => {
             Post.countDocuments(query)
         ]);
 
-        const postsWithCounts = await attachCommentCounts(posts);
+        const postsWithCounts = await attachCommentCounts(posts, req.user?.id);
 
         return res.status(200).json({
             success: true,
@@ -335,7 +351,7 @@ const getUserPosts = async (req, res) => {
             Post.countDocuments(query)
         ]);
 
-        const postsWithCounts = await attachCommentCounts(posts);
+        const postsWithCounts = await attachCommentCounts(posts, req.user?.id);
 
         return res.status(200).json({
             success: true,
@@ -388,15 +404,23 @@ const getPostBySlug = async (req, res) => {
         }
 
         // Increment view count
-        await Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } });
-        const commentsCount = await Comment.countDocuments({ post: post._id });
+        const [commentsCount, likesCount, userLike, userBookmark] = await Promise.all([
+            Comment.countDocuments({ post: post._id }),
+            Like.countDocuments({ post: post._id }),
+            req.user?.id ? Like.exists({ post: post._id, user: req.user.id }) : false,
+            req.user?.id ? Bookmark.exists({ post: post._id, user: req.user.id }) : false,
+            Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } })
+        ]);
 
         return res.status(200).json({
             success: true,
             message: "Post fetched",
             data: {
                 ...post.toObject(),
-                commentsCount
+                commentsCount,
+                likesCount,
+                likedByMe: Boolean(userLike),
+                bookmarkedByMe: Boolean(userBookmark)
             }
         });
     } catch (e) {
@@ -440,15 +464,23 @@ const getPostById = async (req, res) => {
             }
         }
 
-        await Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } });
-        const commentsCount = await Comment.countDocuments({ post: post._id });
+        const [commentsCount, likesCount, userLike, userBookmark] = await Promise.all([
+            Comment.countDocuments({ post: post._id }),
+            Like.countDocuments({ post: post._id }),
+            req.user?.id ? Like.exists({ post: post._id, user: req.user.id }) : false,
+            req.user?.id ? Bookmark.exists({ post: post._id, user: req.user.id }) : false,
+            Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } })
+        ]);
 
         return res.status(200).json({
             success: true,
             message: "Post fetched",
             data: {
                 ...post.toObject(),
-                commentsCount
+                commentsCount,
+                likesCount,
+                likedByMe: Boolean(userLike),
+                bookmarkedByMe: Boolean(userBookmark)
             }
         });
     } catch (e) {

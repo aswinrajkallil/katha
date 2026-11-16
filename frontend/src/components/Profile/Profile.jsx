@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MapPin,
   Globe,
@@ -21,7 +22,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import apiFetch from "../../api/api";
+import apiFetch, { apiQuery } from "../../api/api";
+import { queryKeys } from "../../api/queryClient";
 import PostList from "../Posts/PostList";
 import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
@@ -77,10 +79,8 @@ export default function Profile() {
   const navigate = useNavigate();
   const { user: currentUser, logout } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("posts"); // 'posts' | 'bookmarks'
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'grid'
 
@@ -91,26 +91,19 @@ export default function Profile() {
 
   const menuRef = useRef(null);
 
-  const fetchProfile = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch(`/users/${encodeURIComponent(id)}`);
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Profile not found");
-      }
-      setProfile(data.data);
-    } catch (err) {
-      setError(err.message || "Unable to load profile");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // React Query for profile server state
+  const {
+    data: profile,
+    isLoading: loading,
+    error: profileError,
+    refetch: fetchProfile,
+  } = useQuery({
+    queryKey: queryKeys.profile(id),
+    queryFn: () => apiQuery(`/users/${encodeURIComponent(id)}`),
+    staleTime: 60 * 1000,
+  });
 
-  useEffect(() => {
-    fetchProfile();
-  }, [id]);
+  const error = profileError ? profileError.message : "";
 
   // Close overflow menu on outside click
   useEffect(() => {
@@ -149,15 +142,18 @@ export default function Profile() {
     const nextIsFollowing = !previousState.isFollowing;
     const nextFollowersCount = Math.max(0, previousState.followers + (nextIsFollowing ? 1 : -1));
 
-    // Optimistic UI update
-    setProfile((prev) => ({
-      ...prev,
-      isFollowing: nextIsFollowing,
-      stats: {
-        ...prev.stats,
-        followers: nextFollowersCount,
-      },
-    }));
+    // Optimistic cache update in react-query
+    queryClient.setQueryData(queryKeys.profile(id), (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        isFollowing: nextIsFollowing,
+        stats: {
+          ...old.stats,
+          followers: nextFollowersCount,
+        },
+      };
+    });
 
     setFollowBusy(true);
 
@@ -171,11 +167,18 @@ export default function Profile() {
       }
 
       if (data.data?.followers !== undefined) {
-        setProfile((prev) => ({
-          ...prev,
-          stats: { ...prev.stats, followers: data.data.followers },
-        }));
+        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            stats: { ...old.stats, followers: data.data.followers },
+          };
+        });
       }
+
+      // Also invalidate following feed and suggestions so they stay fresh
+      queryClient.invalidateQueries({ queryKey: ["feed", "following"] });
+      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
 
       toast.success(
         nextIsFollowing
@@ -184,14 +187,17 @@ export default function Profile() {
       );
     } catch (err) {
       // Rollback on error
-      setProfile((prev) => ({
-        ...prev,
-        isFollowing: previousState.isFollowing,
-        stats: {
-          ...prev.stats,
-          followers: previousState.followers,
-        },
-      }));
+      queryClient.setQueryData(queryKeys.profile(id), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          isFollowing: previousState.isFollowing,
+          stats: {
+            ...old.stats,
+            followers: previousState.followers,
+          },
+        };
+      });
       toast.error(err.message || "Network error. Please try again.");
     } finally {
       setFollowBusy(false);

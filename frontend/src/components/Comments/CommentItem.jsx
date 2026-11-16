@@ -41,7 +41,7 @@ const countDescendants = (node) => {
   return node.children.reduce((acc, child) => acc + 1 + countDescendants(child), 0);
 };
 
-export default function CommentItem({
+function CommentItem({
   comment,
   postId,
   postAuthorId,
@@ -513,3 +513,5 @@ export default function CommentItem({
     </div>
   );
 }
+
+export default React.memo(CommentItem);

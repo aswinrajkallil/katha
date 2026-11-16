@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sparkles, SearchX, PlusCircle, Heart, MessageCircle, Video as VideoIcon } from "lucide-react";
 import PostCard from "./PostCard";
-import apiFetch from "../../api/api";
+import { apiQuery } from "../../api/api";
+import { queryKeys } from "../../api/queryClient";
 import { mediaUrl } from "../../utils/media";
 import "./PostList.css";
 
@@ -25,11 +27,7 @@ const PostSkeleton = () => (
 
 const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = false, viewMode = "list" }) => {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [posts, setPosts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
     const [page, setPage] = useState(1);
-    const [pagination, setPagination] = useState(null);
 
     const canFilter = !myPosts && !authorId && !bookmarks;
 
@@ -43,67 +41,66 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = f
         setPage(1);
     }, [qParam, timeParam, sortParam]);
 
-    useEffect(() => {
-        let isCurrent = true;
+    const filterObj = useMemo(() => ({
+        page,
+        limit: 10,
+        ...(myPosts && { myPosts: true }),
+        ...(authorId && { authorId }),
+        ...(bookmarks && { bookmarks: true }),
+        ...(canFilter && {
+            ...(qParam && { search: qParam }),
+            ...(timeParam && { dateRange: timeParam }),
+            sort: sortParam,
+        }),
+    }), [page, myPosts, authorId, bookmarks, canFilter, qParam, timeParam, sortParam]);
 
-        const loadPosts = async () => {
-            setLoading(true);
-            setError("");
-            try {
-                const params = new URLSearchParams({ page: String(page), limit: "10" });
-                if (canFilter) {
-                    if (qParam) params.set("search", qParam);
-                    if (timeParam) params.set("dateRange", timeParam);
-                    params.set("sort", sortParam);
-                }
+    const queryKey = bookmarks
+        ? queryKeys.bookmarks()
+        : authorId
+        ? queryKeys.posts({ authorId, page })
+        : myPosts
+        ? queryKeys.posts({ myPosts: true, page })
+        : queryKeys.posts(filterObj);
 
-                const path = bookmarks
-                    ? "/bookmarks"
-                    : myPosts
-                    ? "/posts/my"
-                    : authorId
-                    ? `/users/${encodeURIComponent(authorId)}/posts`
-                    : "/posts";
-
-                const response = await apiFetch(`${path}?${params.toString()}`);
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || "Failed to load posts");
-                }
-                if (isCurrent) {
-                    if (bookmarks) {
-                        const raw = data.data?.bookmarks || [];
-                        const mapped = raw
-                            .map((b) => (b.post ? { ...b.post, bookmarkId: b._id } : null))
-                            .filter(Boolean);
-                        setPosts(mapped);
-                        setPagination(data.data?.pagination || null);
-                    } else {
-                        setPosts(data.data.posts || []);
-                        setPagination(data.data.pagination || null);
-                    }
-                }
-            } catch (err) {
-                if (isCurrent) {
-                    setError(
-                        err.message === "SESSION_EXPIRED"
-                            ? "Your session has expired. Please sign in again."
-                            : (err.message || "Failed to load posts")
-                    );
-                }
-            } finally {
-                if (isCurrent) {
-                    setLoading(false);
-                }
+    const {
+        data: queryData,
+        isLoading: loading,
+        error: queryError,
+    } = useQuery({
+        queryKey,
+        queryFn: async ({ signal }) => {
+            const params = new URLSearchParams({ page: String(page), limit: "10" });
+            if (canFilter) {
+                if (qParam) params.set("search", qParam);
+                if (timeParam) params.set("dateRange", timeParam);
+                params.set("sort", sortParam);
             }
-        };
 
-        loadPosts();
+            const path = bookmarks
+                ? "/bookmarks"
+                : myPosts
+                ? "/posts/my"
+                : authorId
+                ? `/users/${encodeURIComponent(authorId)}/posts`
+                : "/posts";
 
-        return () => {
-            isCurrent = false;
-        };
-    }, [myPosts, authorId, page, canFilter, qParam, timeParam, sortParam]);
+            return apiQuery(`${path}?${params.toString()}`, { signal });
+        },
+    });
+
+    const posts = useMemo(() => {
+        if (!queryData) return [];
+        if (bookmarks) {
+            const raw = queryData.bookmarks || [];
+            return raw
+                .map((b) => (b.post ? { ...b.post, bookmarkId: b._id } : null))
+                .filter(Boolean);
+        }
+        return queryData.posts || [];
+    }, [queryData, bookmarks]);
+
+    const pagination = queryData?.pagination || null;
+    const error = queryError ? queryError.message : "";
 
     const handleClearSearch = () => {
         setSearchParams(prev => {

@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle,
   Share2,
@@ -13,7 +14,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import apiFetch from "../../api/api";
+import apiFetch, { apiQuery } from "../../api/api";
+import { patchPostEverywhere, seedPost, queryKeys } from "../../api/queryClient";
 import ConfirmDialog from "../ConfirmDialog";
 import UserAvatar from "../UserAvatar";
 import { mediaUrl } from "../../utils/media";
@@ -43,23 +45,43 @@ const getYouTubeEmbedUrl = (url) => {
   return match ? `https://www.youtube.com/embed/${match[1]}` : null;
 };
 
-export default function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = false }) {
+function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = false }) {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [bookmarked, setBookmarked] = useState(Boolean(post.isBookmarked));
-  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+  const [bookmarked, setBookmarked] = useState(Boolean(post.isBookmarked || post.bookmarkedByMe));
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
 
   const menuRef = useRef(null);
 
+  useEffect(() => {
+    setBookmarked(Boolean(post.isBookmarked || post.bookmarkedByMe));
+  }, [post.isBookmarked, post.bookmarkedByMe]);
+
   const isAuthor = user && post.author && (user._id === post.author._id || user.id === post.author._id);
   const isAdmin = user && user.role === "admin";
   const canModify = isAuthor || isAdmin;
+
+  // Prefetch post and author on hover
+  const handleMouseEnter = useCallback(() => {
+    if (isPreview || !post._id) return;
+    seedPost(queryClient, post);
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.post(post._id),
+      queryFn: () => apiQuery(`/posts/${post._id}`),
+    });
+    if (post.author?.username) {
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.profile(post.author.username),
+        queryFn: () => apiQuery(`/users/${encodeURIComponent(post.author.username)}`),
+      });
+    }
+  }, [isPreview, post, queryClient]);
 
   const isVideo = Boolean(post.videoUrl || post.type === "video");
   const authorUsername = post.author?.username || "anonymous";
@@ -141,21 +163,30 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
       navigate("/login");
       return;
     }
-    if (bookmarkLoading) return;
 
-    setBookmarkLoading(true);
+    const prev = Boolean(bookmarked);
+    const next = !prev;
+
+    // Optimistic cache update
+    setBookmarked(next);
+    patchPostEverywhere(queryClient, post._id, (p) => ({
+      ...p,
+      bookmarkedByMe: next,
+    }));
+
     try {
-      const method = bookmarked ? "DELETE" : "POST";
+      const method = next ? "POST" : "DELETE";
       const res = await apiFetch(`/posts/${post._id}/bookmark`, { method });
-      if (res.ok) {
-        const next = !bookmarked;
-        setBookmarked(next);
-        toast.success(next ? "Post saved to Bookmarks" : "Removed from Bookmarks");
-      }
+      if (!res.ok) throw new Error("Bookmark failed");
+      toast.success(next ? "Post saved to Bookmarks" : "Removed from Bookmarks");
     } catch {
+      // Rollback
+      setBookmarked(prev);
+      patchPostEverywhere(queryClient, post._id, (p) => ({
+        ...p,
+        bookmarkedByMe: prev,
+      }));
       toast.error("Unable to update bookmark");
-    } finally {
-      setBookmarkLoading(false);
     }
   };
 
@@ -166,6 +197,16 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
       if (res.ok) {
         toast.success("Post deleted successfully");
         setConfirmOpen(false);
+        // Remove from queryClient
+        queryClient.removeQueries({ queryKey: queryKeys.post(post._id) });
+        queryClient.setQueriesData({ queryKey: ["posts"] }, (old) => {
+          if (!old) return old;
+          if (Array.isArray(old)) return old.filter((p) => p._id !== post._id);
+          if (Array.isArray(old.posts)) {
+            return { ...old, posts: old.posts.filter((p) => p._id !== post._id) };
+          }
+          return old;
+        });
         if (onDelete) {
           onDelete(post._id);
         }
@@ -186,6 +227,7 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
     <>
       <article
         className="reddit-post-card"
+        onMouseEnter={handleMouseEnter}
         onKeyDown={handleKeyDown}
         tabIndex={isPreview ? -1 : 0}
         aria-label={`View post: ${post.title}`}
@@ -444,3 +486,5 @@ export default function PostCard({ post, onDelete, isPreview = false, showFollow
     </>
   );
 }
+
+export default memo(PostCard);
