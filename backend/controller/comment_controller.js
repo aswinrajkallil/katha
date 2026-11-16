@@ -2,6 +2,7 @@ import Comment from "../models/Comment.js";
 import Post from "../models/Post.js";
 import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
+import { emitToRoom } from "../socket.js";
 
 const isValidId = id => mongoose.Types.ObjectId.isValid(id);
 
@@ -55,6 +56,12 @@ const createComment = async (req, res) => {
                 post: postId,
                 comment: comment._id
             }).catch(error => console.error("Comment notification failed:", error));
+            emitToRoom(`user:${recipient}`, "notification:new", {
+                type: "COMMENT",
+                postId,
+                commentId: comment._id,
+                actorId: req.user.id
+            });
         }
 
         const formatted = {
@@ -64,6 +71,14 @@ const createComment = async (req, res) => {
             isEdited: false,
             isDeleted: false
         };
+
+        const commentsCount = await Comment.countDocuments({ post: postId, isDeleted: false });
+        emitToRoom(`post:${postId}`, "comment:created", {
+            postId,
+            commentsCount,
+            comment: formatted,
+            actorId: req.user.id
+        });
 
         return res.status(201).json({ success: true, message: "Comment added", data: formatted });
     } catch (error) {
@@ -183,6 +198,14 @@ const updateComment = async (req, res) => {
             isDeleted: false
         };
 
+        const commentsCount = await Comment.countDocuments({ post: comment.post, isDeleted: false });
+        emitToRoom(`post:${comment.post}`, "comment:updated", {
+            postId: comment.post.toString(),
+            commentsCount,
+            comment: formatted,
+            actorId: req.user.id
+        });
+
         return res.json({ success: true, message: "Comment updated", data: formatted });
     } catch (error) {
         console.error("updateComment:", error);
@@ -204,6 +227,7 @@ const deleteComment = async (req, res) => {
             return res.status(403).json({ success: false, message: "Not authorized" });
         }
 
+        const targetPostId = comment.post.toString();
         // Check if comment has replies
         const hasReplies = await Comment.exists({ parentComment: id });
 
@@ -212,22 +236,26 @@ const deleteComment = async (req, res) => {
             comment.isDeleted = true;
             comment.content = "[deleted]";
             await comment.save();
-            return res.json({
-                success: true,
-                message: "Comment deleted",
-                softDeleted: true,
-                commentId: id
-            });
         } else {
             // Hard delete
             await Comment.findByIdAndDelete(id);
-            return res.json({
-                success: true,
-                message: "Comment deleted",
-                softDeleted: false,
-                commentId: id
-            });
         }
+
+        const commentsCount = await Comment.countDocuments({ post: targetPostId, isDeleted: false });
+        emitToRoom(`post:${targetPostId}`, "comment:deleted", {
+            postId: targetPostId,
+            commentsCount,
+            commentId: id,
+            softDeleted: Boolean(hasReplies),
+            actorId: req.user.id
+        });
+
+        return res.json({
+            success: true,
+            message: "Comment deleted",
+            softDeleted: Boolean(hasReplies),
+            commentId: id
+        });
     } catch (error) {
         console.error("deleteComment:", error);
         return res.status(500).json({ success: false, message: "Unable to delete comment" });

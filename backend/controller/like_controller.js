@@ -2,6 +2,7 @@ import Like from "../models/Like.js";
 import Post from "../models/Post.js";
 import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
+import { emitToRoom } from "../socket.js";
 
 const isValidId = id => mongoose.Types.ObjectId.isValid(id);
 
@@ -18,8 +19,10 @@ const likePost = async (req, res) => {
         }
         if (post.author.toString() !== req.user.id) {
             await Notification.create({ recipient: post.author, sender: req.user.id, type: "LIKE", post: postId }).catch(error => console.error("Like notification failed:", error));
+            emitToRoom(`user:${post.author}`, "notification:new", { type: "LIKE", postId, actorId: req.user.id });
         }
         const likes = await Like.countDocuments({ post: postId });
+        emitToRoom(`post:${postId}`, "post:like", { postId, likesCount: likes, actorId: req.user.id });
         return res.status(201).json({ success: true, message: "Post liked", data: { likes } });
     } catch (error) {
         console.error("likePost:", error);
@@ -34,6 +37,7 @@ const unlikePost = async (req, res) => {
         const deleted = await Like.findOneAndDelete({ user: req.user.id, post: postId });
         if (!deleted) return res.status(404).json({ success: false, message: "You haven't liked this post" });
         const likes = await Like.countDocuments({ post: postId });
+        emitToRoom(`post:${postId}`, "post:like", { postId, likesCount: likes, actorId: req.user.id });
         return res.json({ success: true, message: "Post unliked", data: { likes } });
     } catch (error) {
         console.error("unlikePost:", error);

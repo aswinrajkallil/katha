@@ -1,4 +1,5 @@
 import express from "express";
+import http from "http";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -7,6 +8,7 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 
 import connectDB from "./db/connectDB.js";
+import { initSocket } from "./socket.js";
 import authRouter from "./routes/auth_route.js";
 import postRouter from "./routes/post_route.js";
 import categoryRouter from "./routes/category_route.js";
@@ -93,11 +95,15 @@ app.use((err, req, res, next) => {
     next();
 });
 
+const httpServer = http.createServer(app);
+const io = initSocket(httpServer, allowedOrigins);
+app.set("io", io);
+
 const startServer = async () => {
     try {
         if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) throw new Error("JWT_SECRET and JWT_REFRESH_SECRET must be configured");
         await connectDB();
-        app.listen(PORT, () => console.log(`Kathā API running on http://localhost:${PORT}`));
+        httpServer.listen(PORT, () => console.log(`Kathā API running on http://localhost:${PORT}`));
     } catch (error) {
         console.error("Failed to start API:", error);
         process.exit(1);

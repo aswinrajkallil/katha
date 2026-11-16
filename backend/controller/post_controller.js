@@ -3,8 +3,10 @@ import Post from "../models/Post.js";
 import Like from "../models/Like.js";
 import Comment from "../models/Comment.js";
 import Bookmark from "../models/Bookmark.js";
+import Follow from "../models/Follow.js";
 import cloudinary from "../config/cloudinary.js";
 import uploadToCloudinary from "../utils/cloudinaryUpload.js";
+import { emitToRoom, emitToAll } from "../socket.js";
 
 // Helper: validate ObjectId
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -99,6 +101,24 @@ const createPost = async (req, res) => {
         uploadedImage = null;
         await post.populate("author", "username email profileImage");
         await post.populate("category", "name slug");
+
+        if (post.status === "published") {
+            const postPayload = {
+                _id: post._id,
+                title: post.title,
+                excerpt: post.excerpt,
+                type: post.type,
+                coverImage: post.coverImage,
+                createdAt: post.createdAt,
+                author: post.author
+            };
+            emitToAll("post:created", { post: postPayload, authorId: req.user.id });
+            Follow.find({ following: req.user.id }).select("follower").lean().then(followers => {
+                followers.forEach(f => {
+                    emitToRoom(`user:${f.follower}`, "post:created", { post: postPayload, authorId: req.user.id });
+                });
+            }).catch(err => console.error("Error broadcasting post:created:", err));
+        }
 
         return res.status(201).json({
             success: true,
@@ -515,6 +535,8 @@ const updatePost = async (req, res) => {
                 message: "You are not authorized to update this post"
             });
         }
+
+        const wasPublished = post.status === "published";
 
         // Safe fields to update — author is never changed
         const { title, content, excerpt, type, videoUrl, tags, status, category } =

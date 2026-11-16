@@ -2,6 +2,7 @@ import Follow from "../models/Follow.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
+import { emitToRoom } from "../socket.js";
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -19,7 +20,9 @@ const followUser = async (req, res) => {
             throw error;
         }
         await Notification.create({ recipient: userId, sender: req.user.id, type: "FOLLOW" }).catch(error => console.error("Follow notification failed:", error));
+        emitToRoom(`user:${userId}`, "notification:new", { type: "FOLLOW", actorId: req.user.id });
         const followers = await Follow.countDocuments({ following: userId });
+        emitToRoom(`user:${userId}`, "follow:changed", { targetUserId: userId, followersCount: followers, actorId: req.user.id, isFollowing: true });
         return res.status(201).json({ success: true, message: `You are now following ${target.username}`, data: { followers } });
     } catch (error) {
         console.error("followUser:", error);
@@ -34,6 +37,7 @@ const unfollowUser = async (req, res) => {
         const result = await Follow.findOneAndDelete({ follower: req.user.id, following: userId });
         if (!result) return res.status(404).json({ success: false, message: "You are not following this user" });
         const followers = await Follow.countDocuments({ following: userId });
+        emitToRoom(`user:${userId}`, "follow:changed", { targetUserId: userId, followersCount: followers, actorId: req.user.id, isFollowing: false });
         return res.json({ success: true, message: "Unfollowed successfully", data: { followers } });
     } catch (error) {
         return res.status(500).json({ success: false, message: "Unable to unfollow user" });

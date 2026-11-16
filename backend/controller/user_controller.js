@@ -4,6 +4,7 @@ import Post from "../models/Post.js";
 import mongoose from "mongoose";
 import uploadToCloudinary from "../utils/cloudinaryUpload.js";
 import cloudinary from "../config/cloudinary.js";
+import { emitToRoom } from "../socket.js";
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const publicFields = "username fullName profileImage coverImage bio location website createdAt";
@@ -150,6 +151,7 @@ const updateProfile = async (req, res) => {
         const data = user.toObject();
         delete data.password;
         delete data.refreshToken;
+        emitToRoom(`user:${user._id}`, "profile:updated", { userId: user._id.toString(), profile: data });
         return res.json({ success: true, message: "Profile updated", data });
     } catch (error) {
         if (error.code === 11000) return res.status(409).json({ success: false, message: "That username is already taken" });
@@ -184,6 +186,7 @@ const updateCoverImage = async (req, res) => {
         const data = user.toObject();
         delete data.password;
         delete data.refreshToken;
+        emitToRoom(`user:${user._id}`, "profile:updated", { userId: user._id.toString(), profile: data });
         return res.json({ success: true, message: "Cover image updated", data });
     } catch (error) {
         console.error("updateCoverImage:", error);
