@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { Sparkles, SearchX, PlusCircle } from "lucide-react";
+import { Sparkles, SearchX, PlusCircle, Heart, MessageCircle, Video as VideoIcon } from "lucide-react";
 import PostCard from "./PostCard";
 import apiFetch from "../../api/api";
+import { mediaUrl } from "../../utils/media";
 import "./PostList.css";
 
 const PostSkeleton = () => (
@@ -22,7 +23,7 @@ const PostSkeleton = () => (
   </div>
 );
 
-const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
+const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = false, viewMode = "list" }) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -30,7 +31,7 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState(null);
 
-    const canFilter = !myPosts && !authorId;
+    const canFilter = !myPosts && !authorId && !bookmarks;
 
     // Read from URL search parameters
     const qParam = canFilter ? (searchParams.get("q") || "").trim() : "";
@@ -56,7 +57,9 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
                     params.set("sort", sortParam);
                 }
 
-                const path = myPosts
+                const path = bookmarks
+                    ? "/bookmarks"
+                    : myPosts
                     ? "/posts/my"
                     : authorId
                     ? `/users/${encodeURIComponent(authorId)}/posts`
@@ -68,8 +71,17 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
                     throw new Error(data.message || "Failed to load posts");
                 }
                 if (isCurrent) {
-                    setPosts(data.data.posts || []);
-                    setPagination(data.data.pagination || null);
+                    if (bookmarks) {
+                        const raw = data.data?.bookmarks || [];
+                        const mapped = raw
+                            .map((b) => (b.post ? { ...b.post, bookmarkId: b._id } : null))
+                            .filter(Boolean);
+                        setPosts(mapped);
+                        setPagination(data.data?.pagination || null);
+                    } else {
+                        setPosts(data.data.posts || []);
+                        setPagination(data.data.pagination || null);
+                    }
                 }
             } catch (err) {
                 if (isCurrent) {
@@ -173,14 +185,58 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false }) => {
                 </div>
             )}
 
-            {/* Posts Feed */}
-            {!loading && posts.map(post => (
-                <PostCard
-                    key={post._id}
-                    post={post}
-                    onDelete={deletedId => setPosts(current => current.filter(item => item._id !== deletedId))}
-                />
-            ))}
+            {/* Posts Feed or Grid */}
+            {!loading && (
+                viewMode === "grid" ? (
+                    <div className="post-grid-container">
+                        {posts.map(post => (
+                            <Link
+                                key={post._id}
+                                to={`/post/${post._id}`}
+                                className="post-grid-item"
+                                aria-label={post.title}
+                            >
+                                {post.coverImage ? (
+                                    <img
+                                        src={mediaUrl(post.coverImage, { w: 400, h: 400, fit: "fill" })}
+                                        alt={post.title}
+                                        className="post-grid-image"
+                                        loading="lazy"
+                                        decoding="async"
+                                    />
+                                ) : (
+                                    <div className="post-grid-fallback">
+                                        <span className="post-grid-fallback-title">{post.title}</span>
+                                    </div>
+                                )}
+                                {post.type === "video" && (
+                                    <span className="post-grid-video-badge" aria-label="Video">
+                                        <VideoIcon size={14} />
+                                    </span>
+                                )}
+                                <div className="post-grid-overlay">
+                                    <span className="post-grid-stat">
+                                        <Heart size={16} fill="white" />
+                                        {post.likesCount || 0}
+                                    </span>
+                                    <span className="post-grid-stat">
+                                        <MessageCircle size={16} fill="white" />
+                                        {post.commentsCount || 0}
+                                    </span>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                ) : (
+                    posts.map(post => (
+                        <PostCard
+                            key={post._id}
+                            post={post}
+                            onDelete={deletedId => setPosts(current => current.filter(item => item._id !== deletedId))}
+                        />
+                    ))
+                )
+            )}
 
             {/* Pagination */}
             {!loading && pagination && pagination.totalPages > 1 && (
