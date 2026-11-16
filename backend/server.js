@@ -21,6 +21,7 @@ import userRouter from "./routes/user_route.js";
 import feedRouter from "./routes/feed_route.js";
 import notificationRouter from "./routes/notification_route.js";
 import discoveryRouter from "./routes/discovery_route.js";
+import adminRouter from "./routes/admin_route.js";
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +64,7 @@ app.use("/api/categories", categoryRouter);
 app.use("/api/users", userRouter);
 app.use("/api/feed", feedRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api", discoveryRouter);
 
 app.get("/", (req, res) => res.json({ success: true, message: "Kathā API is running" }));
