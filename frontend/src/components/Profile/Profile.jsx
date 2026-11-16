@@ -263,9 +263,7 @@ export default function Profile() {
   if (loading) {
     return (
       <main className="profile-page">
-        <div className="profile-top-nav">
-          <BackButton />
-        </div>
+        <BackButton />
         <ProfileSkeleton />
       </main>
     );
@@ -274,9 +272,7 @@ export default function Profile() {
   if (error && !profile) {
     return (
       <main className="profile-page">
-        <div className="profile-top-nav">
-          <BackButton />
-        </div>
+        <BackButton />
         <div className="profile-error-card" role="alert">
           <div className="profile-error-icon">
             <AlertCircle size={28} />
@@ -309,9 +305,7 @@ export default function Profile() {
 
   return (
     <main className="profile-page">
-      <div className="profile-top-nav">
-        <BackButton />
-      </div>
+      <BackButton />
 
       {/* Profile Header Card */}
       <section className="profile-header-card" aria-label="User profile">

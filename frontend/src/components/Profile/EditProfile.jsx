@@ -344,9 +344,7 @@ export default function EditProfile() {
 
   return (
     <main className="edit-profile-page">
-      <div className="edit-profile-top-bar">
-        <BackButton onClick={triggerBack} />
-      </div>
+      <BackButton onClick={triggerBack} />
 
       <h1 className="edit-profile-heading">Edit Profile</h1>
 

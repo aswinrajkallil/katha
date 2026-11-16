@@ -194,11 +194,9 @@ export default function CreatePost() {
       <div className="create-post-layout">
         {/* Left Form Column */}
         <div className="create-post-form-col">
-          <div className="create-post-header-row">
-            <BackButton to="/" label="Back" />
-            <div className="create-post-heading-wrap">
-              <h1 className="create-post-title">Create a Post</h1>
-            </div>
+          <BackButton to="/" />
+          <div className="create-post-heading-wrap" style={{ marginBottom: 20 }}>
+            <h1 className="create-post-title">Create a Post</h1>
           </div>
 
           <form onSubmit={handleSubmit}>

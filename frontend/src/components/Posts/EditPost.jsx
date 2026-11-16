@@ -155,7 +155,7 @@ export default function EditPost() {
 
   return (
     <div style={{ maxWidth: 760, margin: "32px auto 64px auto", padding: "0 20px" }}>
-      <BackButton to={`/post/${id}`} label="Back" />
+      <BackButton to={`/post/${id}`} />
       <div style={{ background: "#ffffff", border: "1px solid #e8eaed", borderRadius: 16, padding: "28px 32px", marginTop: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.04)" }}>
         <h1 style={{ fontSize: "1.45rem", fontWeight: 700, margin: "0 0 20px 0", color: "#111827" }}>
           Edit Post

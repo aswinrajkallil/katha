@@ -323,26 +323,24 @@ export default function PostDetails() {
 
   return (
     <div className="post-details-page">
-      <div className="post-details-top-bar">
-        <BackButton />
-        {canModify && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <Link to={`/posts/${id}/edit`} className="reddit-action-pill" style={{ textDecoration: "none" }}>
-              <Pencil size={15} />
-              <span>Edit</span>
-            </Link>
-            <button
-              type="button"
-              className="reddit-action-pill"
-              style={{ color: "#dc2626" }}
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 size={15} />
-              <span>Delete</span>
-            </button>
-          </div>
-        )}
-      </div>
+      <BackButton />
+      {canModify && (
+        <div className="post-details-admin-bar">
+          <Link to={`/posts/${id}/edit`} className="reddit-action-pill" style={{ textDecoration: "none" }}>
+            <Pencil size={15} />
+            <span>Edit</span>
+          </Link>
+          <button
+            type="button"
+            className="reddit-action-pill"
+            style={{ color: "#dc2626" }}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={15} />
+            <span>Delete</span>
+          </button>
+        </div>
+      )}
 
       {/* Main Post Card */}
       <article className="post-details-card">

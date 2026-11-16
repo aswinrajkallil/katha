@@ -2,13 +2,18 @@ import { useNavigate } from "react-router-dom";
 import { useNavigationGuard } from "../context/NavigationGuardContext";
 import "./BackButton.css";
 
-export default function BackButton({ to, label = "Back", className = "" }) {
+export default function BackButton({ to, onClick, className = "" }) {
   const navigate = useNavigate();
   const { triggerGuard } = useNavigationGuard();
 
-  const handleClick = () => {
+  const handleClick = (e) => {
     // Check if dirty form or unsaved changes guard blocks navigation
     if (triggerGuard && triggerGuard()) {
+      return;
+    }
+
+    if (onClick) {
+      onClick(e);
       return;
     }
 
@@ -32,6 +37,7 @@ export default function BackButton({ to, label = "Back", className = "" }) {
       className={`back-btn ${className}`}
       onClick={handleClick}
       aria-label="Go back"
+      title="Back"
     >
       <span className="back-btn-icon" aria-hidden="true">
         <svg
@@ -46,7 +52,6 @@ export default function BackButton({ to, label = "Back", className = "" }) {
           <polyline points="12 19 5 12 12 5" />
         </svg>
       </span>
-      <span className="back-btn-text">{label}</span>
     </button>
   );
 }

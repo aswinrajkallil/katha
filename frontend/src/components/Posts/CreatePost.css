@@ -31,6 +31,10 @@
   background: #ffffff;
 }
 
+.create-post-form-col .back-btn {
+  top: 12px;
+}
+
 .create-post-header-row {
   display: flex;
   align-items: center;
