@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -58,12 +58,17 @@ export default function PostDetails() {
   const [commentsSort, setCommentsSort] = useState("best");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [likeLoading, setLikeLoading] = useState(false);
+
+  // Prefix key: matches the comments cache for every sort order of this post
+  const commentsPrefix = ["comments", String(id || "")];
 
   // 1. Single query for Post + likesCount + commentsCount + likedByMe + bookmarkedByMe
   const {
     data: post,
     isLoading: loading,
     error: postError,
+    refetch,
   } = useQuery({
     queryKey: queryKeys.post(id),
     queryFn: () => apiQuery(`/posts/${id}`),
@@ -87,29 +92,32 @@ export default function PostDetails() {
   useEffect(() => {
     if (!socket || !id) return;
 
+    const isMe = (actorId) => actorId && (actorId === user?._id || actorId === user?.id);
+    const prefix = ["comments", String(id)];
+
     const onPostLike = (data) => {
-      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+      if (data.postId === id && !isMe(data.actorId)) {
         patchPostEverywhere(queryClient, id, (old) => ({ ...old, likesCount: data.likesCount }));
       }
     };
 
     const onCommentCreated = (data) => {
-      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+      if (data.postId === id && !isMe(data.actorId)) {
         patchPostEverywhere(queryClient, id, (old) => ({ ...old, commentsCount: data.commentsCount }));
-        queryClient.invalidateQueries({ queryKey: queryKeys.postComments(id) });
+        queryClient.invalidateQueries({ queryKey: prefix });
       }
     };
 
     const onCommentUpdated = (data) => {
-      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.postComments(id) });
+      if (data.postId === id && !isMe(data.actorId)) {
+        queryClient.invalidateQueries({ queryKey: prefix });
       }
     };
 
     const onCommentDeleted = (data) => {
-      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+      if (data.postId === id && !isMe(data.actorId)) {
         patchPostEverywhere(queryClient, id, (old) => ({ ...old, commentsCount: data.commentsCount }));
-        queryClient.invalidateQueries({ queryKey: queryKeys.postComments(id) });
+        queryClient.invalidateQueries({ queryKey: prefix });
       }
     };
 
@@ -137,11 +145,14 @@ export default function PostDetails() {
       navigate("/login");
       return;
     }
+    if (likeLoading) return;
+
     const prevLiked = userLiked;
     const prevCount = likes;
     const nextLiked = !prevLiked;
     const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
 
+    setLikeLoading(true);
     patchPostEverywhere(queryClient, id, (p) => ({
       ...p,
       likedByMe: nextLiked,
@@ -160,6 +171,8 @@ export default function PostDetails() {
         likesCount: prevCount,
       }));
       toast.error("Failed to update like");
+    } finally {
+      setLikeLoading(false);
     }
   };
 
@@ -226,7 +239,7 @@ export default function PostDetails() {
   };
 
   const handleCommentAdded = () => {
-    queryClient.invalidateQueries({ queryKey: ["comments", id] });
+    queryClient.invalidateQueries({ queryKey: commentsPrefix });
     patchPostEverywhere(queryClient, id, (p) => ({
       ...p,
       commentsCount: (p.commentsCount || 0) + 1,
@@ -234,11 +247,11 @@ export default function PostDetails() {
   };
 
   const handleCommentUpdated = () => {
-    queryClient.invalidateQueries({ queryKey: ["comments", id] });
+    queryClient.invalidateQueries({ queryKey: commentsPrefix });
   };
 
   const handleCommentDeleted = () => {
-    queryClient.invalidateQueries({ queryKey: ["comments", id] });
+    queryClient.invalidateQueries({ queryKey: commentsPrefix });
     patchPostEverywhere(queryClient, id, (p) => ({
       ...p,
       commentsCount: Math.max(0, (p.commentsCount || 1) - 1),
@@ -262,12 +275,24 @@ export default function PostDetails() {
   }
 
   if (error || !post) {
+    const notFound = postError?.status === 404;
     return (
       <div className="post-details-page">
         <BackButton />
         <div className="post-details-card" style={{ textAlign: "center", padding: "48px 24px" }}>
-          <h2 style={{ color: "#dc2626", margin: "0 0 8px 0" }}>Post Not Found</h2>
-          <p style={{ color: "#5f6368", marginBottom: 20 }}>{error || "This story may have been deleted or is no longer available."}</p>
+          <h2 style={{ color: "#dc2626", margin: "0 0 8px 0" }}>
+            {notFound ? "Post Not Found" : "Couldn't load this post"}
+          </h2>
+          <p style={{ color: "#5f6368", marginBottom: 20 }}>
+            {notFound
+              ? "This story may have been deleted or is no longer available."
+              : "Check your connection (the server may be waking up) and try again."}
+          </p>
+          {!notFound && (
+            <button type="button" className="btn-primary" onClick={() => refetch()} style={{ marginRight: 8 }}>
+              Try again
+            </button>
+          )}
           <Link to="/" className="btn-primary">Back to Home</Link>
         </div>
       </div>
@@ -458,7 +483,7 @@ export default function PostDetails() {
         confirmText="Delete"
         cancelText="Cancel"
         loading={deleting}
-        onConfirm={handleDelete}
+        onConfirm={handleDeleteConfirm}
         onClose={() => setConfirmDelete(false)}
       />
     </div>
