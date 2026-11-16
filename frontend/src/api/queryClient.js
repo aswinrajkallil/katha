@@ -44,6 +44,11 @@ export const queryKeys = {
   followers: (id) => ["connections", "followers", String(id || "")],
   following: (id) => ["connections", "following", String(id || "")],
   categories: () => ["categories"],
+  adminStats: () => ["admin", "stats"],
+  adminUsers: (params = {}) => ["admin", "users", params],
+  adminUser: (id) => ["admin", "user", String(id || "")],
+  adminUserPosts: (id, params = {}) => ["admin", "user", String(id || ""), "posts", params],
+  adminPosts: (params = {}) => ["admin", "posts", params],
 };
 
 /**

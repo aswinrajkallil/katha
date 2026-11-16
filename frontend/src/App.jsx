@@ -24,6 +24,14 @@ const Notifications = lazy(() => import("./pages/Notifications"));
 const Connections = lazy(() => import("./pages/Connections"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// Admin lazy routes (fully code-split from public app bundle)
+const AdminLogin = lazy(() => import("./pages/Admin/AdminLogin"));
+const AdminLayout = lazy(() => import("./pages/Admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("./pages/Admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("./pages/Admin/AdminUsers"));
+const AdminUserDetail = lazy(() => import("./pages/Admin/AdminUserDetail"));
+const AdminPosts = lazy(() => import("./pages/Admin/AdminPosts"));
+
 const PageLoader = () => (
   <div style={{ padding: "48px 24px", textAlign: "center", color: "#70757a" }}>
     <div className="skeleton-shimmer" style={{ width: 140, height: 18, borderRadius: 8, margin: "0 auto" }} />
@@ -37,6 +45,13 @@ const ProtectedRoute = ({ children }) => {
     return children;
 };
 
+const AdminRoute = ({ children }) => {
+    const { user, loading } = useAuth();
+    if (loading) return <PageLoader />;
+    if (!user || user.role !== "admin") return <Navigate to="/admin/login" replace />;
+    return children;
+};
+
 function AppRoutes() {
     return (
         <Suspense fallback={<PageLoader />}>
@@ -45,6 +60,22 @@ function AppRoutes() {
                 <Route element={<AuthLayout />}>
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
+                </Route>
+
+                {/* Admin Routes: Isolated from public layout and lazy loaded */}
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route
+                    path="/admin"
+                    element={
+                        <AdminRoute>
+                            <AdminLayout />
+                        </AdminRoute>
+                    }
+                >
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="users" element={<AdminUsers />} />
+                    <Route path="users/:id" element={<AdminUserDetail />} />
+                    <Route path="posts" element={<AdminPosts />} />
                 </Route>
 
                 {/* Main Application Routes */}
