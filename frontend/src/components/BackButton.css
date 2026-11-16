@@ -65,7 +65,13 @@
   outline: 2px solid #e8590c;
   outline-offset: 2px;
 }
-
+/* Desktop: pull the button into the empty gutter left of the content,
+   so it never sits on top of the post card while scrolling */
+@media (min-width: 1280px) {
+  .back-btn {
+    margin-left: -56px; /* 40px button + 16px gap */
+  }
+}
 /* Mobile breakpoint: below 1024px, hide in-page back buttons so only the mobile header back button is visible */
 @media (max-width: 1023px) {
   .back-btn {
