@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Heart,
   Bookmark,
+  MessageCircle,
   Share2,
   Eye,
   Pencil,
@@ -22,6 +23,7 @@ import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
 import UserAvatar from "../UserAvatar";
 import { mediaUrl } from "../../utils/media";
+import "./ActionPill.css";
 import "./PostDetails.css";
 
 const getRelativeTime = (dateStr) => {
@@ -59,6 +61,17 @@ export default function PostDetails() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [likeLoading, setLikeLoading] = useState(false);
+  const commentFormRef = useRef(null);
+
+  const handleCommentClick = () => {
+    const formEl = document.getElementById("post-comment-form");
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (commentFormRef.current?.focus) {
+      commentFormRef.current.focus();
+    }
+  };
 
   // Prefix key: matches the comments cache for every sort order of this post
   const commentsPrefix = ["comments", String(id || "")];
@@ -418,6 +431,7 @@ export default function PostDetails() {
 
         {/* Action bar */}
         <div className="post-details-actions">
+          {/* Like */}
           <button
             type="button"
             className={`reddit-action-pill ${userLiked ? "liked" : ""}`}
@@ -429,6 +443,18 @@ export default function PostDetails() {
             <span>{likes} {likes === 1 ? "Like" : "Likes"}</span>
           </button>
 
+          {/* Comment */}
+          <button
+            type="button"
+            className="reddit-action-pill"
+            onClick={handleCommentClick}
+            aria-label={`${post.commentsCount || 0} comments`}
+          >
+            <MessageCircle size={16} />
+            <span>{post.commentsCount || 0} Comments</span>
+          </button>
+
+          {/* Save */}
           <button
             type="button"
             className={`reddit-action-pill ${bookmarked ? "bookmarked" : ""}`}
@@ -439,6 +465,7 @@ export default function PostDetails() {
             <span>{bookmarked ? "Saved" : "Save"}</span>
           </button>
 
+          {/* Share */}
           <button
             type="button"
             className="reddit-action-pill"
@@ -449,7 +476,8 @@ export default function PostDetails() {
             <span>Share</span>
           </button>
 
-          <div className="reddit-action-pill action-pill-static">
+          {/* Views */}
+          <div className="reddit-action-pill action-pill-static" aria-label={`${post.views || 0} views`}>
             <Eye size={16} />
             <span>{post.views || 0} views</span>
           </div>
@@ -459,7 +487,7 @@ export default function PostDetails() {
         <hr className="post-details-divider" />
 
         {/* Comment input pill/box */}
-        <CommentForm postId={id} onCommentAdded={handleCommentAdded} />
+        <CommentForm ref={commentFormRef} postId={id} onCommentAdded={handleCommentAdded} />
 
         {/* Comment tree with header & sorting */}
         <CommentList

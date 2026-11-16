@@ -19,6 +19,7 @@ import { patchPostEverywhere, seedPost, queryKeys } from "../../api/queryClient"
 import ConfirmDialog from "../ConfirmDialog";
 import UserAvatar from "../UserAvatar";
 import { mediaUrl } from "../../utils/media";
+import "./ActionPill.css";
 import "./PostCard.css";
 
 const getRelativeTime = (dateStr) => {

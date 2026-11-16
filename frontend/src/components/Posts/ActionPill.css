@@ -1,0 +1,54 @@
+/* =========================================
+   SHARED REDDIT-STYLE ACTION PILLS
+   Used by PostCard and PostDetails
+========================================= */
+
+.reddit-action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background-color: #f3f4f6;
+  border: none;
+  color: #4b5563;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.1s ease;
+  user-select: none;
+}
+
+.reddit-action-pill:hover:not(.action-pill-static) {
+  background-color: #e5e7eb;
+  color: #111827;
+}
+
+.reddit-action-pill:active:not(.action-pill-static) {
+  transform: scale(0.96);
+}
+
+.reddit-action-pill.bookmarked {
+  background-color: #ffedd5;
+  color: #e8590c;
+}
+
+.reddit-action-pill.liked {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.action-pill-static {
+  cursor: default;
+  background-color: transparent;
+  color: #70757a;
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .reddit-action-pill {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -6,7 +6,7 @@ import apiFetch from "../../api/api";
 import UserAvatar from "../UserAvatar";
 import "./Comments.css";
 
-export default function CommentForm({
+const CommentForm = forwardRef(function CommentForm({
   postId,
   parentCommentId = null,
   onCommentAdded,
@@ -14,13 +14,25 @@ export default function CommentForm({
   placeholder = "Add a comment",
   autoFocus = false,
   initialExpanded = false,
-}) {
+  id: customId,
+}, ref) {
   const { user } = useAuth();
   const toast = useToast();
   const [expanded, setExpanded] = useState(Boolean(initialExpanded || parentCommentId));
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const textareaRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      setExpanded(true);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+      }, 50);
+    },
+  }));
 
   // Auto-focus when requested or when expanded as an inline reply
   useEffect(() => {
@@ -112,10 +124,12 @@ export default function CommentForm({
     }
   };
 
+  const formRootId = customId || (parentCommentId ? `comment-reply-form-${parentCommentId}` : "post-comment-form");
+
   // If user is not logged in and this is the main top-level form
   if (!user && !parentCommentId) {
     return (
-      <div className="reddit-comment-form-root">
+      <div id={formRootId} className="reddit-comment-form-root">
         <div className="reddit-comment-form-collapsed" style={{ cursor: "default" }}>
           <UserAvatar user={null} size={28} />
           <div className="reddit-comment-placeholder-pill">
@@ -132,7 +146,7 @@ export default function CommentForm({
   // Collapsed single-line Reddit pill
   if (!expanded && !parentCommentId) {
     return (
-      <div className="reddit-comment-form-root">
+      <div id={formRootId} className="reddit-comment-form-root">
         <div
           className="reddit-comment-form-collapsed"
           onClick={() => setExpanded(true)}
@@ -154,7 +168,7 @@ export default function CommentForm({
 
   // Expanded Form
   return (
-    <div className={`reddit-comment-form-root ${parentCommentId ? "reddit-inline-reply-box" : ""}`}>
+    <div id={formRootId} className={`reddit-comment-form-root ${parentCommentId ? "reddit-inline-reply-box" : ""}`}>
       <div className="reddit-comment-form-card">
         <div className="reddit-comment-form-header">
           <UserAvatar user={user} size={26} />
@@ -210,4 +224,6 @@ export default function CommentForm({
       </div>
     </div>
   );
-}
+});
+
+export default CommentForm;
