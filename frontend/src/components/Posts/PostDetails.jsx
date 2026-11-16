@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import { useSocket, usePostRoom } from "../../context/SocketContext";
 import apiFetch, { apiQuery } from "../../api/api";
 import { queryKeys, patchPostEverywhere } from "../../api/queryClient";
 import CommentList from "../Comments/CommentList";
@@ -78,6 +79,52 @@ export default function PostDetails() {
     queryFn: () => apiQuery(`/posts/${id}/comments?sort=${commentsSort}`),
     staleTime: 60 * 1000,
   });
+
+  const { socket } = useSocket();
+  usePostRoom(id);
+
+  // Realtime updates for post room
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const onPostLike = (data) => {
+      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+        patchPostEverywhere(queryClient, id, (old) => ({ ...old, likesCount: data.likesCount }));
+      }
+    };
+
+    const onCommentCreated = (data) => {
+      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+        patchPostEverywhere(queryClient, id, (old) => ({ ...old, commentsCount: data.commentsCount }));
+        queryClient.invalidateQueries({ queryKey: queryKeys.postComments(id) });
+      }
+    };
+
+    const onCommentUpdated = (data) => {
+      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.postComments(id) });
+      }
+    };
+
+    const onCommentDeleted = (data) => {
+      if (data.postId === id && data.actorId !== user?._id && data.actorId !== user?.id) {
+        patchPostEverywhere(queryClient, id, (old) => ({ ...old, commentsCount: data.commentsCount }));
+        queryClient.invalidateQueries({ queryKey: queryKeys.postComments(id) });
+      }
+    };
+
+    socket.on("post:like", onPostLike);
+    socket.on("comment:created", onCommentCreated);
+    socket.on("comment:updated", onCommentUpdated);
+    socket.on("comment:deleted", onCommentDeleted);
+
+    return () => {
+      socket.off("post:like", onPostLike);
+      socket.off("comment:created", onCommentCreated);
+      socket.off("comment:updated", onCommentUpdated);
+      socket.off("comment:deleted", onCommentDeleted);
+    };
+  }, [socket, id, user, queryClient]);
 
   const likes = post?.likesCount ?? 0;
   const userLiked = Boolean(post?.likedByMe);

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import { useSocket, useUserRoom } from "../../context/SocketContext";
 import apiFetch, { apiQuery } from "../../api/api";
 import { queryKeys } from "../../api/queryClient";
 import PostList from "../Posts/PostList";
@@ -126,6 +127,49 @@ export default function Profile() {
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
   }, [lightboxImage]);
+
+  const { socket } = useSocket();
+  useUserRoom(profile?._id);
+
+  // Realtime updates for profile room
+  useEffect(() => {
+    if (!socket || !profile?._id) return;
+
+    const onFollowChanged = (data) => {
+      if (data.targetUserId === profile._id) {
+        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            stats: {
+              ...old.stats,
+              followers: data.followersCount,
+            },
+          };
+        });
+      }
+    };
+
+    const onProfileUpdated = (data) => {
+      if (data.userId === profile._id) {
+        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            ...data.profile,
+          };
+        });
+      }
+    };
+
+    socket.on("follow:changed", onFollowChanged);
+    socket.on("profile:updated", onProfileUpdated);
+
+    return () => {
+      socket.off("follow:changed", onFollowChanged);
+      socket.off("profile:updated", onProfileUpdated);
+    };
+  }, [socket, profile?._id, id, queryClient]);
 
   const handleFollowToggle = async () => {
     if (!currentUser) {

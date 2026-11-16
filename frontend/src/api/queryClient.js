@@ -136,3 +136,5 @@ export function seedPost(qc, post) {
   if (!post?._id) return;
   qc.setQueryData(queryKeys.post(post._id), (existing) => existing || post);
 }
+
+export default queryClient;

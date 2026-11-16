@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { SocketProvider } from "./context/SocketContext";
 import { ToastProvider } from "./context/ToastContext";
 import { NavigationGuardProvider } from "./context/NavigationGuardContext";
 import Layout from "./components/Layout";
@@ -72,11 +73,13 @@ export default function App() {
     return (
         <BrowserRouter>
             <AuthProvider>
-                <ToastProvider>
-                    <NavigationGuardProvider>
-                        <AppRoutes />
-                    </NavigationGuardProvider>
-                </ToastProvider>
+                <SocketProvider>
+                    <ToastProvider>
+                        <NavigationGuardProvider>
+                            <AppRoutes />
+                        </NavigationGuardProvider>
+                    </ToastProvider>
+                </SocketProvider>
             </AuthProvider>
         </BrowserRouter>
     );

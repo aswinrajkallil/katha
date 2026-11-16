@@ -584,6 +584,24 @@ const updatePost = async (req, res) => {
         await post.populate("author", "username profileImage");
         await post.populate("category", "name slug");
 
+        if (!wasPublished && post.status === "published") {
+            const postPayload = {
+                _id: post._id,
+                title: post.title,
+                excerpt: post.excerpt,
+                type: post.type,
+                coverImage: post.coverImage,
+                createdAt: post.createdAt,
+                author: post.author
+            };
+            emitToAll("post:created", { post: postPayload, authorId: req.user.id });
+            Follow.find({ following: req.user.id }).select("follower").lean().then(followers => {
+                followers.forEach(f => {
+                    emitToRoom(`user:${f.follower}`, "post:created", { post: postPayload, authorId: req.user.id });
+                });
+            }).catch(err => console.error("Error broadcasting post:created:", err));
+        }
+
         return res.status(200).json({
             success: true,
             message: "Post updated successfully",

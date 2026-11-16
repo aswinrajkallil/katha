@@ -11,6 +11,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useSocket } from "../context/SocketContext";
 import { useToast } from "../context/ToastContext";
 import apiFetch from "../api/api";
 import PostCard from "../components/Posts/PostCard";
@@ -23,6 +24,7 @@ import "./FollowingFeed.css";
 
 export default function FollowingFeed() {
   const { user } = useAuth();
+  const { socket } = useSocket();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -174,40 +176,27 @@ export default function FollowingFeed() {
     }
   }, [followingCount]);
 
-  // Background Polling for New Posts (every 60s, pauses when tab is hidden)
+  // Realtime New Posts notification via Socket (replaces 60s polling)
   useEffect(() => {
-    if (page !== 1 || !posts.length || followingCount === 0) return;
+    if (!socket) return;
 
-    const interval = setInterval(async () => {
-      if (document.hidden) return;
+    const handlePostCreated = (data) => {
+      const myId = user?._id || user?.id;
+      // Don't show pill for own posts
+      if (!data?.post || data.authorId === myId) return;
 
-      try {
-        const url = buildFeedQueryUrl("/feed/following", {
-          page: 1,
-          limit: 5,
-          sort,
-          hasVideo,
-          authorId: selectedAuthor?._id || null,
-        });
-
-        const res = await apiFetch(url);
-        const data = await res.json();
-        if (res.ok && data.success && data.data.posts?.length) {
-          const latestFetched = data.data.posts;
-          const currentTopId = posts[0]?._id;
-          if (currentTopId && latestFetched[0]?._id !== currentTopId) {
-            const newIndex = latestFetched.findIndex((p) => p._id === currentTopId);
-            const count = newIndex > 0 ? newIndex : latestFetched.length;
-            setNewPostsCount(count);
-          }
-        }
-      } catch {
-        // Silently ignore polling errors
+      // Only show if the post author is followed or if user follows anyone
+      const isAuthorFollowed = people.some((p) => (p._id || p.id) === data.authorId);
+      if (isAuthorFollowed || followingCount > 0) {
+        setNewPostsCount((prev) => prev + 1);
       }
-    }, 60000);
+    };
 
-    return () => clearInterval(interval);
-  }, [page, posts, followingCount, sort, hasVideo, selectedAuthor]);
+    socket.on("post:created", handlePostCreated);
+    return () => {
+      socket.off("post:created", handlePostCreated);
+    };
+  }, [socket, user, people, followingCount]);
 
   // Handle Loading More (Pagination)
   const handleLoadMore = () => {
