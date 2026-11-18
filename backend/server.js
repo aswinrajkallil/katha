@@ -9,6 +9,7 @@ import multer from "multer";
 
 import connectDB from "./db/connectDB.js";
 import { initSocket } from "./socket.js";
+import { isAllowedOrigin } from "./config/cors.js";
 import authRouter from "./routes/auth_route.js";
 import postRouter from "./routes/post_route.js";
 import categoryRouter from "./routes/category_route.js";
@@ -43,10 +44,7 @@ const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
     .map((o) => o.trim().replace(/\/$/, ""));
 
 app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-        callback(null, false);
-    },
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin, allowedOrigins)),
     credentials: true,
 }));
 app.use(express.json({ limit: "1mb" }));
