@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import { isAllowedOrigin } from "./utils/corsOrigin.js";
 
 let ioInstance = null;
 
@@ -7,7 +8,7 @@ export const initSocket = (httpServer, allowedOrigins) => {
     const io = new Server(httpServer, {
         cors: {
             origin: (origin, callback) => {
-                if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+                if (isAllowedOrigin(origin, allowedOrigins)) return callback(null, true);
                 callback(null, false);
             },
             credentials: true,

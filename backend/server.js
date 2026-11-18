@@ -2,6 +2,7 @@ import express from "express";
 import http from "http";
 import dotenv from "dotenv";
 import cors from "cors";
+import { isAllowedOrigin } from "./utils/corsOrigin.js";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -44,7 +45,7 @@ const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        if (isAllowedOrigin(origin, allowedOrigins)) return callback(null, true);
         callback(null, false);
     },
     credentials: true,
