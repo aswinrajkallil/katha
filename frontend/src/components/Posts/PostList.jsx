@@ -33,13 +33,12 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = f
 
     // Read from URL search parameters
     const qParam = canFilter ? (searchParams.get("q") || "").trim() : "";
-    const timeParam = canFilter ? (searchParams.get("time") || "") : "";
     const sortParam = canFilter ? (searchParams.get("sort") || "latest") : "latest";
 
     // Reset pagination to page 1 whenever query or filters change
     useEffect(() => {
         setPage(1);
-    }, [qParam, timeParam, sortParam]);
+    }, [qParam, sortParam]);
 
     const filterObj = useMemo(() => ({
         page,
@@ -49,10 +48,9 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = f
         ...(bookmarks && { bookmarks: true }),
         ...(canFilter && {
             ...(qParam && { search: qParam }),
-            ...(timeParam && { dateRange: timeParam }),
             sort: sortParam,
         }),
-    }), [page, myPosts, authorId, bookmarks, canFilter, qParam, timeParam, sortParam]);
+    }), [page, myPosts, authorId, bookmarks, canFilter, qParam, sortParam]);
 
     const queryKey = bookmarks
         ? queryKeys.bookmarks()
@@ -72,7 +70,6 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = f
             const params = new URLSearchParams({ page: String(page), limit: "10" });
             if (canFilter) {
                 if (qParam) params.set("search", qParam);
-                if (timeParam) params.set("dateRange", timeParam);
                 params.set("sort", sortParam);
             }
 
@@ -106,13 +103,12 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = f
         setSearchParams(prev => {
             const next = new URLSearchParams(prev);
             next.delete("q");
-            next.delete("time");
             next.delete("sort");
             return next;
         }, { replace: true });
     };
 
-    const hasActiveFilters = Boolean(qParam || timeParam || (sortParam && sortParam !== "latest"));
+    const hasActiveFilters = Boolean(qParam || (sortParam && sortParam !== "latest"));
 
     return (
         <div className="post-list-container">

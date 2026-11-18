@@ -1,0 +1,43 @@
+/* =========================================
+   HOME (FOR YOU FEED) TWO-COLUMN LAYOUT
+========================================= */
+
+.home-layout-container {
+  max-width: 1120px;
+  margin: 36px auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 32px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.home-main-column {
+  flex: 1;
+  min-width: 0;
+  max-width: 720px;
+  width: 100%;
+}
+
+/* Tablet & Mobile: Single centered column */
+@media (max-width: 1099px) {
+  .home-layout-container {
+    max-width: 800px;
+    margin: 28px auto;
+    padding: 0 20px;
+    gap: 0;
+  }
+
+  .home-main-column {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .home-layout-container {
+    margin: 16px auto;
+    padding: 0 12px;
+  }
+}

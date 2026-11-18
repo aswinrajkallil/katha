@@ -164,7 +164,7 @@ const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const buildPostFilters = async (filters, baseQuery = {}) => {
     const query = { ...baseQuery };
-    const { search, category, type, tags, dateRange, sort, author, hasVideo } = filters;
+    const { search, category, type, tags, sort, author, hasVideo } = filters;
 
     if (search && typeof search === "string" && search.trim()) {
         const term = new RegExp(escapeRegex(search.trim().slice(0, 100)), "i");
@@ -207,17 +207,6 @@ const buildPostFilters = async (filters, baseQuery = {}) => {
             .map(tag => tag.trim()).filter(Boolean).slice(0, 10);
         if (tagList.length) query.tags = { $in: tagList.map(tag => new RegExp(escapeRegex(tag), "i")) };
     }
-
-    const now = new Date();
-    let fromDate = null;
-    if (dateRange === "7days") fromDate = new Date(now.getTime() - 7 * 86400000);
-    if (dateRange === "30days") fromDate = new Date(now.getTime() - 30 * 86400000);
-    if (dateRange === "3months" || dateRange === "6months") {
-        fromDate = new Date(now);
-        fromDate.setMonth(fromDate.getMonth() - (dateRange === "3months" ? 3 : 6));
-    }
-    if (dateRange === "thisYear") fromDate = new Date(now.getFullYear(), 0, 1);
-    if (fromDate) query.createdAt = { $gte: fromDate, $lte: now };
 
     const sortOptions = {
         latest: { createdAt: -1, _id: -1 },
@@ -685,10 +674,153 @@ const deletePost = async (req, res) => {
     }
 };
 
+// GET /api/posts/sidebar — Get top 5 trending posts and 5 most recent posts (strictly de-duplicated)
+const getSidebarPosts = async (req, res) => {
+    try {
+        const limit = 5;
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+
+        /**
+         * Trending Score Formula:
+         * ---------------------------------------------------------------
+         * Uses real engagement fields in the database:
+         * - Recent Likes (weight 3)
+         * - Recent Comments (weight 4)
+         * - Recent Bookmarks / saves (weight 3)
+         * - All-time Views (weight 0.1)
+         *
+         * Combined with a Hacker News style gravity time decay based on post age:
+         * ageInHours = (Date.now() - post.createdAt) / 3,600,000
+         * timeDecay = 1 / Math.pow(ageInHours + 2, 1.2)
+         * finalScore = rawScore * timeDecay
+         */
+        const [recentLikes, recentComments, recentBookmarks] = await Promise.all([
+            Like.aggregate([
+                { $match: { createdAt: { $gte: sevenDaysAgo } } },
+                { $group: { _id: "$post", count: { $sum: 1 } } }
+            ]),
+            Comment.aggregate([
+                { $match: { createdAt: { $gte: sevenDaysAgo }, isDeleted: { $ne: true } } },
+                { $group: { _id: "$post", count: { $sum: 1 } } }
+            ]),
+            Bookmark.aggregate([
+                { $match: { createdAt: { $gte: sevenDaysAgo } } },
+                { $group: { _id: "$post", count: { $sum: 1 } } }
+            ])
+        ]);
+
+        const rawScoreMap = new Map();
+        recentLikes.forEach(item => {
+            const id = item._id.toString();
+            rawScoreMap.set(id, (rawScoreMap.get(id) || 0) + item.count * 3);
+        });
+        recentComments.forEach(item => {
+            const id = item._id.toString();
+            rawScoreMap.set(id, (rawScoreMap.get(id) || 0) + item.count * 4);
+        });
+        recentBookmarks.forEach(item => {
+            const id = item._id.toString();
+            rawScoreMap.set(id, (rawScoreMap.get(id) || 0) + item.count * 3);
+        });
+
+        const activePostIds = Array.from(rawScoreMap.keys());
+        let trendingCandidates = [];
+
+        if (activePostIds.length > 0) {
+            trendingCandidates = await Post.find({
+                _id: { $in: activePostIds },
+                status: "published"
+            })
+                .select("_id title coverImage videoThumbnail type views createdAt author")
+                .populate("author", "username fullName profileImage")
+                .lean();
+        }
+
+        const nowMs = Date.now();
+        const scoredTrending = trendingCandidates.map(post => {
+            const raw = rawScoreMap.get(post._id.toString()) || 0;
+            const viewsScore = (post.views || 0) * 0.1;
+            const ageInHours = Math.max(0, (nowMs - new Date(post.createdAt).getTime()) / (1000 * 60 * 60));
+            const timeDecay = 1 / Math.pow(ageInHours + 2, 1.2);
+            const score = (raw + viewsScore) * timeDecay;
+            return { post, score };
+        });
+
+        scoredTrending.sort((a, b) => b.score - a.score);
+        let trendingPosts = scoredTrending.slice(0, limit).map(item => item.post);
+
+        // Fallback: If fewer than limit posts had recent activity, fill with top-viewed published posts
+        if (trendingPosts.length < limit) {
+            const existingIds = new Set(trendingPosts.map(p => p._id.toString()));
+            const needed = limit - trendingPosts.length;
+            const fallback = await Post.find({
+                status: "published",
+                _id: { $nin: Array.from(existingIds) }
+            })
+                .select("_id title coverImage videoThumbnail type views createdAt author")
+                .populate("author", "username fullName profileImage")
+                .sort({ views: -1, createdAt: -1 })
+                .limit(needed)
+                .lean();
+
+            trendingPosts = [...trendingPosts, ...fallback];
+        }
+
+        // 2. Most Recent Posts: strictly exclude all IDs in trendingPosts
+        const trendingIdSet = trendingPosts.map(p => p._id);
+        const recentPosts = await Post.find({
+            status: "published",
+            _id: { $nin: trendingIdSet }
+        })
+            .select("_id title coverImage videoThumbnail type views createdAt author")
+            .populate("author", "username fullName profileImage")
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+
+        // 3. Attach comments count for all sidebar posts in one batch
+        const allPostIds = [...trendingPosts, ...recentPosts].map(p => p._id);
+        const commentAgg = await Comment.aggregate([
+            { $match: { post: { $in: allPostIds }, isDeleted: { $ne: true } } },
+            { $group: { _id: "$post", count: { $sum: 1 } } }
+        ]);
+        const commentCountMap = new Map(commentAgg.map(c => [c._id.toString(), c.count]));
+
+        const formatSidebarItem = (p) => ({
+            _id: p._id,
+            title: p.title,
+            coverImage: p.coverImage || null,
+            videoThumbnail: p.videoThumbnail || null,
+            type: p.type || "blog",
+            views: p.views || 0,
+            commentsCount: commentCountMap.get(p._id.toString()) || 0,
+            createdAt: p.createdAt,
+            author: p.author ? {
+                _id: p.author._id,
+                username: p.author.username,
+                fullName: p.author.fullName || null,
+                profileImage: p.author.profileImage || null
+            } : null
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                trending: trendingPosts.map(formatSidebarItem),
+                recent: recentPosts.map(formatSidebarItem)
+            }
+        });
+    } catch (err) {
+        console.error("getSidebarPosts error:", err);
+        return res.status(500).json({ success: false, message: "Unable to load sidebar posts" });
+    }
+};
+
 export {
     createPost,
     getPosts,
     getMyPosts,
+    getSidebarPosts,
     getUserPosts,
     getPostBySlug,
     getPostById,

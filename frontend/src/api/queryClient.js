@@ -40,6 +40,7 @@ export const queryKeys = {
   followingFeed: (filters = {}) => ["feed", "following", filters],
   trending: (type = "all") => ["discover", "trending", type],
   popularAuthors: () => ["discover", "authors"],
+  sidebarPosts: () => ["posts", "sidebar"],
   suggestions: () => ["suggestions"],
   followers: (id) => ["connections", "followers", String(id || "")],
   following: (id) => ["connections", "following", String(id || "")],

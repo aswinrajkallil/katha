@@ -3,6 +3,7 @@ import {
     createPost,
     getPosts,
     getMyPosts,
+    getSidebarPosts,
     getUserPosts,
     getPostBySlug,
     getPostById,
@@ -17,6 +18,7 @@ const router = express.Router();
 
 // Specific routes MUST come before parameterized /:id routes
 router.get("/my", authenticate, getMyPosts);
+router.get("/sidebar", optionalAuth, getSidebarPosts);
 router.get("/slug/:slug", optionalAuth, getPostBySlug);
 router.get("/user/:userId", getUserPosts);
 

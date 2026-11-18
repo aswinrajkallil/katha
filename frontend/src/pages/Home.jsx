@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import WelcomeHero from "../components/WelcomeHero";
 import PostList from "../components/Posts/PostList";
+import FeedSidebar from "../components/FeedSidebar/FeedSidebar";
+import "./Home.css";
 
 const Home = () => {
     const { user } = useAuth();
@@ -44,9 +46,12 @@ const Home = () => {
     }, [storageKey]);
 
     return (
-        <div style={{ maxWidth: 800, margin: "40px auto", padding: 24 }}>
-            {showWelcome && <WelcomeHero />}
-            <PostList />
+        <div className="home-layout-container">
+            <div className="home-main-column">
+                {showWelcome && <WelcomeHero />}
+                <PostList />
+            </div>
+            <FeedSidebar />
         </div>
     );
 };
