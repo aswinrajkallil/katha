@@ -178,7 +178,7 @@ const AuthorRow = React.memo(function AuthorRow({ author }) {
           aria-pressed={following}
           aria-busy={busy}
         >
-          {busy ? (following ? "Unfollowing…" : "Following…") : following ? "Following" : "Follow"}
+          {busy ? "Updating…" : following ? "Following" : "Follow"}
         </button>
       )}
     </li>
