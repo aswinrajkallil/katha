@@ -174,7 +174,7 @@ export default function Profile() {
       socket.off("follow:changed", onFollowChanged);
       socket.off("profile:updated", onProfileUpdated);
     };
-  }, [socket, profile?._id, id, queryClient]);
+  }, [socket, profile?._id, id, queryClient, currentUser?._id, currentUser?.id]);
 
   const handleFollowToggle = async () => {
     if (!currentUser) {
