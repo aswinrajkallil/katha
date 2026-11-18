@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState } from "react";\nimport { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, MessageCircle, Eye, FileText, ChevronRight } from "lucide-react";
 import apiFetch, { apiQuery } from "../../api/api";
-import { queryKeys } from "../../api/queryClient";
+import { queryKeys, patchFollowState } from "../../api/queryClient";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { mediaUrl } from "../../utils/media";
@@ -100,25 +100,48 @@ const PostRow = React.memo(function PostRow({ post, rank }) {
 const AuthorRow = React.memo(function AuthorRow({ author }) {
   const { user } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [following, setFollowing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const following = Boolean(author.isFollowing);
 
   const displayName = author.fullName || author.username;
   const profilePath = `/profile/${author.username}`;
 
-  const handleFollow = async () => {
-    if (busy || following) return;
+  const handleFollowToggle = async () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    if (busy || !author?._id) return;
+
+    const previousFollowing = following;
+    const previousFollowers = author.followersCount ?? 0;
+    const nextFollowing = !previousFollowing;
+    const optimisticFollowers = Math.max(0, previousFollowers + (nextFollowing ? 1 : -1));
+
     setBusy(true);
-    setFollowing(true); // optimistic
+    patchFollowState(queryClient, author._id, nextFollowing, optimisticFollowers);
+
     try {
-      const res = await apiFetch(`/users/${author._id}/follow`, { method: "POST" });
-      if (!res.ok) throw new Error("follow failed");
-      queryClient.invalidateQueries({ queryKey: ["feed"] });
-      queryClient.invalidateQueries({ queryKey: ["connections"] });
-    } catch {
-      setFollowing(false);
-      toast.error("Couldn't follow. Please try again.");
+      const method = nextFollowing ? "POST" : "DELETE";
+      const res = await apiFetch(`/users/${encodeURIComponent(author._id)}/follow`, { method });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Follow request failed (${res.status})`);
+      }
+
+      patchFollowState(queryClient, author._id, nextFollowing, data.data?.followers);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
+      toast.success(nextFollowing ? `Following @${author.username}` : `Unfollowed @${author.username}`);
+    } catch (error) {
+      patchFollowState(queryClient, author._id, previousFollowing, previousFollowers);
+      toast.error(error.message || "Couldn't update follow status. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -150,10 +173,12 @@ const AuthorRow = React.memo(function AuthorRow({ author }) {
         <button
           type="button"
           className={`fs-follow-btn ${following ? "is-following" : ""}`}
-          onClick={handleFollow}
-          disabled={busy || following}
+          onClick={handleFollowToggle}
+          disabled={busy}
+          aria-pressed={following}
+          aria-busy={busy}
         >
-          {following ? "Following" : "Follow"}
+          {busy ? (following ? "Unfollowing…" : "Following…") : following ? "Following" : "Follow"}
         </button>
       )}
     </li>
