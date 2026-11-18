@@ -138,7 +138,7 @@ export default function Profile() {
 
     const onFollowChanged = (data) => {
       if (data.targetUserId === profile._id) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+        queryClient.setQueriesData({ queryKey: queryKeys.profile(id) }, (old) => {
           if (!old) return old;
           return {
             ...old,
@@ -157,7 +157,7 @@ export default function Profile() {
 
     const onProfileUpdated = (data) => {
       if (data.userId === profile._id) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+        queryClient.setQueriesData({ queryKey: queryKeys.profile(id) }, (old) => {
           if (!old) return old;
           return {
             ...old,
