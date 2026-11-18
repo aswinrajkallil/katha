@@ -99,7 +99,8 @@ export default function Profile() {
     error: profileError,
     refetch: fetchProfile,
   } = useQuery({
-    queryKey: queryKeys.profile(id),
+    // Follow status belongs to the viewer, so separate cache entries by signed-in user.
+    queryKey: [...queryKeys.profile(id), currentUser?._id || currentUser?.id || "guest"],
     queryFn: () => apiQuery(`/users/${encodeURIComponent(id)}`),
     staleTime: 60 * 1000,
   });
@@ -141,6 +142,10 @@ export default function Profile() {
           if (!old) return old;
           return {
             ...old,
+            isFollowing:
+              String(data.actorId) === String(currentUser?._id || currentUser?.id || "")
+                ? Boolean(data.isFollowing)
+                : old.isFollowing,
             stats: {
               ...old.stats,
               followers: data.followersCount,
