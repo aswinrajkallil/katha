@@ -40,6 +40,13 @@ const getRelativeTime = (dateStr) => {
   return `${diffYr}y ago`;
 };
 
+const formatCount = (n) => {
+  const num = Number(n) || 0;
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(num);
+};
+
 const getYouTubeEmbedUrl = (url) => {
   if (!url) return null;
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
@@ -443,7 +450,7 @@ function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = fals
             aria-label={`${post.commentsCount || 0} comments`}
           >
             <MessageCircle size={16} />
-            <span>{post.commentsCount || 0} Comments</span>
+            <span>{formatCount(post.commentsCount)}</span>
           </button>
 
           <button
@@ -462,13 +469,13 @@ function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = fals
             onClick={handleBookmarkToggle}
             aria-label="Save post"
           >
-            <Bookmark size={16} fill={bookmarked ? "#e8590c" : "none"} color={bookmarked ? "#e8590c" : "currentColor"} />
+            <Bookmark size={16} fill={bookmarked ? "currentColor" : "none"} />
             <span>{bookmarked ? "Saved" : "Save"}</span>
           </button>
 
           <div className="reddit-action-pill action-pill-static" aria-label={`${post.views || 0} views`}>
             <Eye size={16} />
-            <span>{post.views || 0}</span>
+            <span>{formatCount(post.views)}</span>
           </div>
         </div>
       </article>

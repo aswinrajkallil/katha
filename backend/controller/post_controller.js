@@ -674,145 +674,232 @@ const deletePost = async (req, res) => {
     }
 };
 
-// GET /api/posts/sidebar — Get top 5 trending posts and 5 most recent posts (strictly de-duplicated)
+// GET /api/posts/sidebar
+// Returns the right-hand feed sidebar as an ordered list of sections.
+// Rules:
+//   - Sections come back in priority order (most important first).
+//   - A section with no items is NEVER returned, so the UI can't render an empty card.
+//   - At most SIDEBAR_MAX_SECTIONS sections are returned; lower-priority ones act as
+//     fallbacks and only appear when higher-priority ones have nothing to show
+//     (that is how "at least 2 sections" is reached whenever the site has enough content).
+//   - A post is never repeated across the post sections (bookmarks are personal and exempt).
+const SIDEBAR_POST_FIELDS = "_id title coverImage videoThumbnail type views createdAt author";
+const SIDEBAR_MAX_SECTIONS = 4;
+const SIDEBAR_POST_LIMIT = 5;
+
 const getSidebarPosts = async (req, res) => {
     try {
-        const limit = 5;
+        const userId = req.user?.id ? String(req.user.id) : null;
         const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
 
-        /**
-         * Trending Score Formula:
-         * ---------------------------------------------------------------
-         * Uses real engagement fields in the database:
-         * - Recent Likes (weight 3)
-         * - Recent Comments (weight 4)
-         * - Recent Bookmarks / saves (weight 3)
-         * - All-time Views (weight 0.1)
-         *
-         * Combined with a Hacker News style gravity time decay based on post age:
-         * ageInHours = (Date.now() - post.createdAt) / 3,600,000
-         * timeDecay = 1 / Math.pow(ageInHours + 2, 1.2)
-         * finalScore = rawScore * timeDecay
-         */
+        const loadPosts = (filter, sort, n) =>
+            Post.find({ status: "published", ...filter })
+                .select(SIDEBAR_POST_FIELDS)
+                .populate("author", "username fullName profileImage")
+                .sort(sort)
+                .limit(n)
+                .lean();
+
+        // ---------------------------------------------------------------
+        // 1. TRENDING — real engagement in the last 7 days, with time decay.
+        //    Likes x3, comments x4, bookmarks x3, views x0.1, divided by
+        //    (ageInHours + 2) ^ 1.2. Posts with zero recent engagement are
+        //    not trending, so there is deliberately no "fill with anything" fallback.
+        // ---------------------------------------------------------------
+        const recentWindow = { createdAt: { $gte: sevenDaysAgo } };
+        const countByPost = (Model, extra = {}) =>
+            Model.aggregate([
+                { $match: { ...recentWindow, ...extra } },
+                { $group: { _id: "$post", count: { $sum: 1 } } }
+            ]);
+
         const [recentLikes, recentComments, recentBookmarks] = await Promise.all([
-            Like.aggregate([
-                { $match: { createdAt: { $gte: sevenDaysAgo } } },
-                { $group: { _id: "$post", count: { $sum: 1 } } }
-            ]),
-            Comment.aggregate([
-                { $match: { createdAt: { $gte: sevenDaysAgo }, isDeleted: { $ne: true } } },
-                { $group: { _id: "$post", count: { $sum: 1 } } }
-            ]),
-            Bookmark.aggregate([
-                { $match: { createdAt: { $gte: sevenDaysAgo } } },
-                { $group: { _id: "$post", count: { $sum: 1 } } }
+            countByPost(Like),
+            countByPost(Comment, { isDeleted: { $ne: true } }),
+            countByPost(Bookmark)
+        ]);
+
+        const rawScore = new Map();
+        const addScore = (rows, weight) =>
+            rows.forEach(r => {
+                const id = r._id.toString();
+                rawScore.set(id, (rawScore.get(id) || 0) + r.count * weight);
+            });
+        addScore(recentLikes, 3);
+        addScore(recentComments, 4);
+        addScore(recentBookmarks, 3);
+
+        let trending = [];
+        if (rawScore.size > 0) {
+            const candidates = await loadPosts(
+                { _id: { $in: Array.from(rawScore.keys()) } },
+                { createdAt: -1 },
+                200
+            );
+            const nowMs = Date.now();
+            trending = candidates
+                .map(post => {
+                    const ageHours = Math.max(0, (nowMs - new Date(post.createdAt).getTime()) / 3600000);
+                    const decay = 1 / Math.pow(ageHours + 2, 1.2);
+                    const score = ((rawScore.get(post._id.toString()) || 0) + (post.views || 0) * 0.1) * decay;
+                    return { post, score };
+                })
+                .sort((a, b) => b.score - a.score)
+                .slice(0, SIDEBAR_POST_LIMIT)
+                .map(x => x.post);
+        }
+
+        const usedIds = trending.map(p => p._id);
+
+        // ---------------------------------------------------------------
+        // 2. FROM PEOPLE YOU FOLLOW (logged-in only)
+        // ---------------------------------------------------------------
+        let followingIds = [];
+        let following = [];
+        if (userId) {
+            const follows = await Follow.find({ follower: userId }).select("following").lean();
+            followingIds = follows.map(f => f.following);
+            if (followingIds.length) {
+                following = await loadPosts(
+                    { author: { $in: followingIds }, _id: { $nin: usedIds } },
+                    { createdAt: -1 },
+                    4
+                );
+                usedIds.push(...following.map(p => p._id));
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // 3. AUTHORS — "Who to follow" (logged in) / "Top creators" (guest)
+        // ---------------------------------------------------------------
+        const authorMatch = { status: "published" };
+        if (userId) {
+            authorMatch.author = {
+                $nin: [new mongoose.Types.ObjectId(userId), ...followingIds]
+            };
+        }
+        const authorRows = await Post.aggregate([
+            { $match: authorMatch },
+            { $group: { _id: "$author", postCount: { $sum: 1 }, totalViews: { $sum: { $ifNull: ["$views", 0] } } } },
+            { $sort: { postCount: -1, totalViews: -1 } },
+            { $limit: 4 },
+            { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "u" } },
+            { $unwind: "$u" },
+            {
+                $project: {
+                    postCount: 1,
+                    username: "$u.username",
+                    fullName: "$u.fullName",
+                    profileImage: "$u.profileImage"
+                }
+            }
+        ]);
+        let authors = [];
+        if (authorRows.length) {
+            const followerRows = await Follow.aggregate([
+                { $match: { following: { $in: authorRows.map(a => a._id) } } },
+                { $group: { _id: "$following", count: { $sum: 1 } } }
+            ]);
+            const followerMap = new Map(followerRows.map(f => [f._id.toString(), f.count]));
+            authors = authorRows.map(a => ({
+                _id: a._id,
+                username: a.username,
+                fullName: a.fullName || null,
+                profileImage: a.profileImage || null,
+                postCount: a.postCount,
+                followersCount: followerMap.get(a._id.toString()) || 0
+            }));
+        }
+
+        // ---------------------------------------------------------------
+        // 4. MOST RECENT — never repeats a post already shown above
+        // ---------------------------------------------------------------
+        const recent = await loadPosts({ _id: { $nin: usedIds } }, { createdAt: -1, _id: -1 }, SIDEBAR_POST_LIMIT);
+        usedIds.push(...recent.map(p => p._id));
+
+        // ---------------------------------------------------------------
+        // 5. YOUR BOOKMARKS (logged-in only, personal so not de-duplicated)
+        // ---------------------------------------------------------------
+        let bookmarks = [];
+        if (userId) {
+            const rows = await Bookmark.find({ user: userId })
+                .sort({ createdAt: -1 })
+                .limit(10)
+                .populate({
+                    path: "post",
+                    match: { status: "published" },
+                    select: SIDEBAR_POST_FIELDS,
+                    populate: { path: "author", select: "username fullName profileImage" }
+                })
+                .lean();
+            bookmarks = rows.map(r => r.post).filter(Boolean).slice(0, 4);
+        }
+
+        // ---------------------------------------------------------------
+        // 6. MOST VIEWED — lowest priority fallback
+        // ---------------------------------------------------------------
+        const popular = await loadPosts(
+            { _id: { $nin: usedIds }, views: { $gt: 0 } },
+            { views: -1, createdAt: -1 },
+            SIDEBAR_POST_LIMIT
+        );
+
+        // ---------------------------------------------------------------
+        // Batch likes + comments counts for every post we are about to return
+        // ---------------------------------------------------------------
+        const allPosts = [...trending, ...following, ...recent, ...bookmarks, ...popular];
+        const allIds = [...new Set(allPosts.map(p => p._id.toString()))].map(id => new mongoose.Types.ObjectId(id));
+        const [likeAgg, commentAgg] = allIds.length
+            ? await Promise.all([
+                Like.aggregate([
+                    { $match: { post: { $in: allIds } } },
+                    { $group: { _id: "$post", count: { $sum: 1 } } }
+                ]),
+                Comment.aggregate([
+                    { $match: { post: { $in: allIds }, isDeleted: { $ne: true } } },
+                    { $group: { _id: "$post", count: { $sum: 1 } } }
+                ])
             ])
-        ]);
+            : [[], []];
+        const likeMap = new Map(likeAgg.map(r => [r._id.toString(), r.count]));
+        const commentMap = new Map(commentAgg.map(r => [r._id.toString(), r.count]));
 
-        const rawScoreMap = new Map();
-        recentLikes.forEach(item => {
-            const id = item._id.toString();
-            rawScoreMap.set(id, (rawScoreMap.get(id) || 0) + item.count * 3);
-        });
-        recentComments.forEach(item => {
-            const id = item._id.toString();
-            rawScoreMap.set(id, (rawScoreMap.get(id) || 0) + item.count * 4);
-        });
-        recentBookmarks.forEach(item => {
-            const id = item._id.toString();
-            rawScoreMap.set(id, (rawScoreMap.get(id) || 0) + item.count * 3);
-        });
-
-        const activePostIds = Array.from(rawScoreMap.keys());
-        let trendingCandidates = [];
-
-        if (activePostIds.length > 0) {
-            trendingCandidates = await Post.find({
-                _id: { $in: activePostIds },
-                status: "published"
-            })
-                .select("_id title coverImage videoThumbnail type views createdAt author")
-                .populate("author", "username fullName profileImage")
-                .lean();
-        }
-
-        const nowMs = Date.now();
-        const scoredTrending = trendingCandidates.map(post => {
-            const raw = rawScoreMap.get(post._id.toString()) || 0;
-            const viewsScore = (post.views || 0) * 0.1;
-            const ageInHours = Math.max(0, (nowMs - new Date(post.createdAt).getTime()) / (1000 * 60 * 60));
-            const timeDecay = 1 / Math.pow(ageInHours + 2, 1.2);
-            const score = (raw + viewsScore) * timeDecay;
-            return { post, score };
-        });
-
-        scoredTrending.sort((a, b) => b.score - a.score);
-        let trendingPosts = scoredTrending.slice(0, limit).map(item => item.post);
-
-        // Fallback: If fewer than limit posts had recent activity, fill with top-viewed published posts
-        if (trendingPosts.length < limit) {
-            const existingIds = new Set(trendingPosts.map(p => p._id.toString()));
-            const needed = limit - trendingPosts.length;
-            const fallback = await Post.find({
-                status: "published",
-                _id: { $nin: Array.from(existingIds) }
-            })
-                .select("_id title coverImage videoThumbnail type views createdAt author")
-                .populate("author", "username fullName profileImage")
-                .sort({ views: -1, createdAt: -1 })
-                .limit(needed)
-                .lean();
-
-            trendingPosts = [...trendingPosts, ...fallback];
-        }
-
-        // 2. Most Recent Posts: strictly exclude all IDs in trendingPosts
-        const trendingIdSet = trendingPosts.map(p => p._id);
-        const recentPosts = await Post.find({
-            status: "published",
-            _id: { $nin: trendingIdSet }
-        })
-            .select("_id title coverImage videoThumbnail type views createdAt author")
-            .populate("author", "username fullName profileImage")
-            .sort({ createdAt: -1 })
-            .limit(limit)
-            .lean();
-
-        // 3. Attach comments count for all sidebar posts in one batch
-        const allPostIds = [...trendingPosts, ...recentPosts].map(p => p._id);
-        const commentAgg = await Comment.aggregate([
-            { $match: { post: { $in: allPostIds }, isDeleted: { $ne: true } } },
-            { $group: { _id: "$post", count: { $sum: 1 } } }
-        ]);
-        const commentCountMap = new Map(commentAgg.map(c => [c._id.toString(), c.count]));
-
-        const formatSidebarItem = (p) => ({
+        const formatPost = (p) => ({
             _id: p._id,
             title: p.title,
             coverImage: p.coverImage || null,
             videoThumbnail: p.videoThumbnail || null,
             type: p.type || "blog",
             views: p.views || 0,
-            commentsCount: commentCountMap.get(p._id.toString()) || 0,
+            likesCount: likeMap.get(p._id.toString()) || 0,
+            commentsCount: commentMap.get(p._id.toString()) || 0,
             createdAt: p.createdAt,
-            author: p.author ? {
-                _id: p.author._id,
-                username: p.author.username,
-                fullName: p.author.fullName || null,
-                profileImage: p.author.profileImage || null
-            } : null
+            author: p.author
+                ? {
+                    _id: p.author._id,
+                    username: p.author.username,
+                    fullName: p.author.fullName || null,
+                    profileImage: p.author.profileImage || null
+                }
+                : null
         });
 
-        return res.status(200).json({
-            success: true,
-            data: {
-                trending: trendingPosts.map(formatSidebarItem),
-                recent: recentPosts.map(formatSidebarItem)
-            }
-        });
+        // Priority order = display order. Empty sections are dropped, then we cap the count.
+        const ordered = [
+            { key: "trending", title: "Trending", badge: "Last 7 days", kind: "posts", ranked: true, items: trending.map(formatPost) },
+            { key: "following", title: "From people you follow", kind: "posts", items: following.map(formatPost) },
+            { key: "authors", title: userId ? "Who to follow" : "Top creators", kind: "authors", items: authors },
+            { key: "recent", title: "Most recent", badge: "Latest", kind: "posts", items: recent.map(formatPost) },
+            { key: "bookmarks", title: "Your bookmarks", kind: "posts", href: "/bookmarks", items: bookmarks.map(formatPost) },
+            { key: "popular", title: "Most viewed", kind: "posts", items: popular.map(formatPost) }
+        ];
+
+        const sections = ordered.filter(s => s.items.length > 0).slice(0, SIDEBAR_MAX_SECTIONS);
+
+        return res.status(200).json({ success: true, data: { sections } });
     } catch (err) {
         console.error("getSidebarPosts error:", err);
-        return res.status(500).json({ success: false, message: "Unable to load sidebar posts" });
+        return res.status(500).json({ success: false, message: "Unable to load sidebar" });
     }
 };
 

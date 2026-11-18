@@ -1,7 +1,7 @@
 import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Search, Bell, X } from "lucide-react";
+import { ArrowLeft, Search, Bell, X, Plus } from "lucide-react";
 import "./Navbar.css";
 import logoFull from "../assets/katha-logo-full.svg";
 import { useAuth } from "../context/AuthContext";
@@ -231,7 +231,8 @@ export default function Navbar() {
           {user ? (
             <>
               <Link to="/posts/create" className="write-link">
-                + Write
+                <Plus size={16} strokeWidth={2} />
+                <span>Write</span>
               </Link>
 
               <Link to="/notifications" className="icon-btn" aria-label="Notifications">

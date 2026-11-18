@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Heart,
@@ -52,6 +52,7 @@ const getYouTubeEmbedUrl = (url) => {
 
 export default function PostDetails() {
   const { id } = useParams();
+  const { hash } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const toast = useToast();
@@ -87,6 +88,15 @@ export default function PostDetails() {
     queryFn: () => apiQuery(`/posts/${id}`),
     staleTime: 60 * 1000,
   });
+
+  // Deep link from the feed sidebar: /post/:id#comments scrolls to the discussion once the post has rendered
+  useEffect(() => {
+    if (hash !== "#comments" || !post?._id) return;
+    const t = setTimeout(() => {
+      document.getElementById("comments")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [hash, post?._id]);
 
   // 2. Query for Comments
   const {
@@ -482,7 +492,7 @@ export default function PostDetails() {
         </div>
 
         {/* Thin divider before comments in continuous column */}
-        <hr className="post-details-divider" />
+        <hr id="comments" className="post-details-divider" />
 
         {/* Comment input pill/box */}
         <CommentForm ref={commentFormRef} postId={id} onCommentAdded={handleCommentAdded} />
