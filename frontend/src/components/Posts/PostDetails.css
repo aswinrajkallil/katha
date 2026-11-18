@@ -290,3 +290,8 @@
     font-size: 1.4rem;
   }
 }
+
+/* Target of /post/:id#comments links; keeps the divider clear of the sticky navbar */
+#comments {
+  scroll-margin-top: 80px;
+}

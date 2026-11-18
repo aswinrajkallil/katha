@@ -1,18 +1,19 @@
-import React, { useMemo } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Flame, Clock, MessageCircle, Eye, RefreshCw, FileText } from "lucide-react";
-import { apiQuery } from "../../api/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Heart, MessageCircle, Eye, FileText, ChevronRight } from "lucide-react";
+import apiFetch, { apiQuery } from "../../api/api";
 import { queryKeys } from "../../api/queryClient";
+import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import { mediaUrl } from "../../utils/media";
+import UserAvatar from "../UserAvatar";
 import "./FeedSidebar.css";
 
-// Relative time formatting: "2m ago", "3h ago", "2d ago", etc.
+// "2m ago", "3h ago", "2d ago" ...
 const formatRelativeTime = (dateStr) => {
   if (!dateStr) return "";
-  const now = Date.now();
-  const past = new Date(dateStr).getTime();
-  const diffSec = Math.max(0, Math.floor((now - past) / 1000));
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000));
   if (diffSec < 60) return "just now";
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) return `${diffMin}m ago`;
@@ -21,205 +22,238 @@ const formatRelativeTime = (dateStr) => {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
   const diffWeeks = Math.floor(diffDays / 7);
-  if (diffWeeks < 4) return `${diffWeeks}w ago`;
+  if (diffWeeks < 5) return `${diffWeeks}w ago`;
   return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
-// Compact number formatting (e.g. 1.2k)
-const formatCompactNum = (num) => {
+// 1200 -> 1.2k
+const formatCompact = (num) => {
   if (!num || num <= 0) return "0";
   if (num >= 1000000) return `${(num / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(num);
 };
 
-const SidebarSkeletonList = () => (
-  <div className="sidebar-skeleton-group" aria-hidden="true">
-    {Array.from({ length: 5 }).map((_, idx) => (
-      <div key={idx} className="sidebar-item-skeleton">
-        <div className="sidebar-thumb-skeleton shimmer-box" />
-        <div className="sidebar-text-skeleton">
-          <div className="shimmer-box shimmer-line title-line-1" />
-          <div className="shimmer-box shimmer-line title-line-2" />
-          <div className="shimmer-box shimmer-line meta-line" />
-        </div>
-      </div>
-    ))}
-  </div>
-);
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-const SidebarItem = React.memo(({ post, rank }) => {
+/* ---------------------------------------------------------------
+   Post row: the title link is stretched over the whole row, and the
+   three stats sit above it as their own links (no nested anchors).
+---------------------------------------------------------------- */
+const PostRow = React.memo(function PostRow({ post, rank }) {
   const thumbSrc = post.coverImage || post.videoThumbnail;
+  const postPath = `/post/${post._id}`;
 
   return (
-    <li className="sidebar-item">
-      <Link
-        to={`/post/${post._id}`}
-        className="sidebar-item-link"
-        aria-label={`${post.title} by ${post.author?.fullName || post.author?.username || "author"}`}
-      >
-        <div className="sidebar-item-thumb-wrapper">
-          {thumbSrc ? (
-            <img
-              src={mediaUrl(thumbSrc, { w: 96, h: 96, fit: "fill" })}
-              alt=""
-              loading="lazy"
-              className="sidebar-item-thumb"
-            />
-          ) : (
-            <div className="sidebar-item-thumb-fallback">
-              <FileText size={18} />
-            </div>
-          )}
-          {typeof rank === "number" && (
-            <span className="sidebar-item-rank-badge">{rank}</span>
-          )}
-        </div>
+    <li className="fs-row">
+      <div className="fs-thumb">
+        {thumbSrc ? (
+          <img src={mediaUrl(thumbSrc, { w: 112, h: 112, fit: "fill" })} alt="" loading="lazy" />
+        ) : (
+          <span className="fs-thumb-fallback" aria-hidden="true">
+            <FileText size={18} />
+          </span>
+        )}
+        {typeof rank === "number" && <span className="fs-rank">{rank}</span>}
+      </div>
 
-        <div className="sidebar-item-content">
-          <h4 className="sidebar-item-title" title={post.title}>
+      <div className="fs-body">
+        <h4 className="fs-title">
+          <Link to={postPath} className="fs-title-link" title={post.title}>
             {post.title}
-          </h4>
+          </Link>
+        </h4>
 
-          <div className="sidebar-item-meta">
-            <span className="sidebar-item-author">
-              @{post.author?.username || "author"}
-            </span>
-            <span className="sidebar-meta-dot">&bull;</span>
-            <span className="sidebar-item-time">{formatRelativeTime(post.createdAt)}</span>
-          </div>
-
-          <div className="sidebar-item-metrics">
-            <span className="sidebar-metric" title={`${post.commentsCount ?? 0} comments`}>
-              <MessageCircle size={12} className="sidebar-metric-icon" />
-              <span>{formatCompactNum(post.commentsCount)}</span>
-            </span>
-
-            <span className="sidebar-metric" title={`${post.views ?? 0} views`}>
-              <Eye size={12} className="sidebar-metric-icon" />
-              <span>{formatCompactNum(post.views)}</span>
-            </span>
-          </div>
+        <div className="fs-meta">
+          <span>@{post.author?.username || "author"}</span>
+          <span aria-hidden="true">&bull;</span>
+          <span>{formatRelativeTime(post.createdAt)}</span>
         </div>
-      </Link>
+
+        <div className="fs-stats">
+          <Link to={postPath} className="fs-stat" aria-label={plural(post.likesCount ?? 0, "like")} title="Likes">
+            <Heart size={13} />
+            <span>{formatCompact(post.likesCount)}</span>
+          </Link>
+          <Link
+            to={`${postPath}#comments`}
+            className="fs-stat"
+            aria-label={plural(post.commentsCount ?? 0, "comment")}
+            title="Comments"
+          >
+            <MessageCircle size={13} />
+            <span>{formatCompact(post.commentsCount)}</span>
+          </Link>
+          <Link to={postPath} className="fs-stat" aria-label={plural(post.views ?? 0, "view")} title="Views">
+            <Eye size={13} />
+            <span>{formatCompact(post.views)}</span>
+          </Link>
+        </div>
+      </div>
     </li>
   );
 });
 
+/* ---------------------------------------------------------------
+   Author row with a Follow button (logged-in users only)
+---------------------------------------------------------------- */
+const AuthorRow = React.memo(function AuthorRow({ author }) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const displayName = author.fullName || author.username;
+  const profilePath = `/profile/${author.username}`;
+
+  const handleFollow = async () => {
+    if (busy || following) return;
+    setBusy(true);
+    setFollowing(true); // optimistic
+    try {
+      const res = await apiFetch(`/users/${author._id}/follow`, { method: "POST" });
+      if (!res.ok) throw new Error("follow failed");
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
+    } catch {
+      setFollowing(false);
+      toast.error("Couldn't follow. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="fs-row fs-author-row">
+      <Link to={profilePath} className="fs-author-avatar" aria-label={`View ${displayName}'s profile`}>
+        <UserAvatar user={author} size={40} />
+      </Link>
+
+      <div className="fs-body">
+        <h4 className="fs-title fs-author-name">
+          <Link to={profilePath} className="fs-title-link">
+            {displayName}
+          </Link>
+        </h4>
+        <div className="fs-meta">
+          <span>@{author.username}</span>
+        </div>
+        <div className="fs-meta">
+          <span>{plural(author.postCount ?? 0, "post")}</span>
+          <span aria-hidden="true">&bull;</span>
+          <span>{plural(author.followersCount ?? 0, "follower")}</span>
+        </div>
+      </div>
+
+      {user && (
+        <button
+          type="button"
+          className={`fs-follow-btn ${following ? "is-following" : ""}`}
+          onClick={handleFollow}
+          disabled={busy || following}
+        >
+          {following ? "Following" : "Follow"}
+        </button>
+      )}
+    </li>
+  );
+});
+
+const SectionCard = ({ section }) => {
+  const headingId = `fs-heading-${section.key}`;
+  const isPosts = section.kind === "posts";
+
+  return (
+    <section className="fs-card" aria-labelledby={headingId}>
+      <header className="fs-card-header">
+        <h3 id={headingId} className="fs-card-title">
+          {section.title}
+        </h3>
+        {section.href ? (
+          <Link to={section.href} className="fs-card-link">
+            See all <ChevronRight size={14} />
+          </Link>
+        ) : (
+          section.badge && <span className="fs-card-badge">{section.badge}</span>
+        )}
+      </header>
+
+      <ul className="fs-list">
+        {isPosts
+          ? section.items.map((post, idx) => (
+              <PostRow key={post._id} post={post} rank={section.ranked ? idx + 1 : undefined} />
+            ))
+          : section.items.map((author) => <AuthorRow key={author._id} author={author} />)}
+      </ul>
+    </section>
+  );
+};
+
+const SkeletonCard = () => (
+  <div className="fs-card" aria-hidden="true">
+    <div className="fs-card-header">
+      <div className="fs-skel fs-skel-heading" />
+    </div>
+    <div className="fs-list">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="fs-row">
+          <div className="fs-skel fs-skel-thumb" />
+          <div className="fs-body">
+            <div className="fs-skel fs-skel-line" />
+            <div className="fs-skel fs-skel-line short" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 export default function FeedSidebar() {
-  const {
-    data: sidebarData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: queryKeys.sidebarPosts(),
+  const { user } = useAuth();
+  const userKey = user?._id || user?.id || "guest";
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    // userKey in the key so logging in/out never shows the other user's sidebar
+    queryKey: [...queryKeys.sidebarPosts(), userKey],
     queryFn: () => apiQuery("/posts/sidebar"),
     staleTime: 60 * 1000,
     gcTime: 5 * 60 * 1000,
   });
 
-  const trending = useMemo(() => sidebarData?.data?.trending || [], [sidebarData]);
-  const recent = useMemo(() => sidebarData?.data?.recent || [], [sidebarData]);
+  // apiQuery already unwraps `data`, so the payload is { sections } (not data.sections)
+  const sections = data?.sections ?? [];
+
+  if (isLoading) {
+    return (
+      <aside className="feed-right-sidebar" aria-busy="true" aria-label="Loading sidebar">
+        <SkeletonCard />
+        <SkeletonCard />
+      </aside>
+    );
+  }
+
+  if (isError) {
+    return (
+      <aside className="feed-right-sidebar" aria-label="Sidebar">
+        <p className="fs-error">
+          Couldn&apos;t load this section.{" "}
+          <button type="button" className="fs-error-retry" onClick={() => refetch()}>
+            Retry
+          </button>
+        </p>
+      </aside>
+    );
+  }
+
+  // Nothing to show at all: render nothing, never an empty card
+  if (sections.length === 0) return null;
 
   return (
-    <aside className="feed-right-sidebar" aria-label="Featured and latest posts">
-      {/* 1. TRENDING CARD */}
-      <section className="sidebar-card" aria-labelledby="sidebar-trending-heading">
-        <header className="sidebar-card-header">
-          <div className="sidebar-header-title-wrap">
-            <div className="sidebar-header-icon-wrap trending">
-              <Flame size={16} />
-            </div>
-            <h3 id="sidebar-trending-heading" className="sidebar-card-title">
-              Trending
-            </h3>
-          </div>
-          <span className="sidebar-header-badge">Last 7 days</span>
-        </header>
-
-        <div className="sidebar-card-body">
-          {isLoading && <SidebarSkeletonList />}
-
-          {isError && (
-            <div className="sidebar-error-state">
-              <p className="sidebar-error-text">Failed to load trending</p>
-              <button
-                type="button"
-                className="sidebar-retry-btn"
-                onClick={() => refetch()}
-                aria-label="Retry loading trending stories"
-              >
-                <RefreshCw size={13} />
-                <span>Retry</span>
-              </button>
-            </div>
-          )}
-
-          {!isLoading && !isError && trending.length === 0 && (
-            <div className="sidebar-empty-state">
-              <p>No trending stories right now.</p>
-            </div>
-          )}
-
-          {!isLoading && !isError && trending.length > 0 && (
-            <ol className="sidebar-items-list">
-              {trending.map((post, idx) => (
-                <SidebarItem key={post._id} post={post} rank={idx + 1} />
-              ))}
-            </ol>
-          )}
-        </div>
-      </section>
-
-      {/* 2. MOST RECENT CARD */}
-      <section className="sidebar-card" aria-labelledby="sidebar-recent-heading">
-        <header className="sidebar-card-header">
-          <div className="sidebar-header-title-wrap">
-            <div className="sidebar-header-icon-wrap recent">
-              <Clock size={16} />
-            </div>
-            <h3 id="sidebar-recent-heading" className="sidebar-card-title">
-              Most Recent
-            </h3>
-          </div>
-          <span className="sidebar-header-badge">Latest</span>
-        </header>
-
-        <div className="sidebar-card-body">
-          {isLoading && <SidebarSkeletonList />}
-
-          {isError && (
-            <div className="sidebar-error-state">
-              <p className="sidebar-error-text">Failed to load recent</p>
-              <button
-                type="button"
-                className="sidebar-retry-btn"
-                onClick={() => refetch()}
-                aria-label="Retry loading recent stories"
-              >
-                <RefreshCw size={13} />
-                <span>Retry</span>
-              </button>
-            </div>
-          )}
-
-          {!isLoading && !isError && recent.length === 0 && (
-            <div className="sidebar-empty-state">
-              <p>No recent stories right now.</p>
-            </div>
-          )}
-
-          {!isLoading && !isError && recent.length > 0 && (
-            <ul className="sidebar-items-list">
-              {recent.map((post) => (
-                <SidebarItem key={post._id} post={post} />
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+    <aside className="feed-right-sidebar" aria-label="Trending, creators and latest stories">
+      {sections.map((section) => (
+        <SectionCard key={section.key} section={section} />
+      ))}
     </aside>
   );
 }
