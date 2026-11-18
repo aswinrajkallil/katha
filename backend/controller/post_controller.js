@@ -774,9 +774,9 @@ const getSidebarPosts = async (req, res) => {
         // ---------------------------------------------------------------
         const authorMatch = { status: "published" };
         if (userId) {
-            authorMatch.author = {
-                $nin: [new mongoose.Types.ObjectId(userId), ...followingIds]
-            };
+            // Keep followed creators visible so the sidebar can offer an Unfollow action.
+            // Exclude only the signed-in user.
+            authorMatch.author = { $ne: new mongoose.Types.ObjectId(userId) };
         }
         const authorRows = await Post.aggregate([
             { $match: authorMatch },
@@ -807,7 +807,10 @@ const getSidebarPosts = async (req, res) => {
                 fullName: a.fullName || null,
                 profileImage: a.profileImage || null,
                 postCount: a.postCount,
-                followersCount: followerMap.get(a._id.toString()) || 0
+                followersCount: followerMap.get(a._id.toString()) || 0,
+                isFollowing: userId
+                    ? followingIds.some(id => id.toString() === a._id.toString())
+                    : false
             }));
         }
 
