@@ -24,7 +24,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useSocket, useUserRoom } from "../../context/SocketContext";
 import apiFetch, { apiQuery } from "../../api/api";
-import { queryKeys } from "../../api/queryClient";
+import { queryKeys, patchFollowState } from "../../api/queryClient";
 import PostList from "../Posts/PostList";
 import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
@@ -187,42 +187,33 @@ export default function Profile() {
     const nextFollowersCount = Math.max(0, previousState.followers + (nextIsFollowing ? 1 : -1));
 
     // Optimistic cache update in react-query
-    queryClient.setQueryData(queryKeys.profile(id), (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        isFollowing: nextIsFollowing,
-        stats: {
-          ...old.stats,
-          followers: nextFollowersCount,
-        },
-      };
-    });
+    patchFollowState(queryClient, profile._id, nextIsFollowing, nextFollowersCount);
 
     setFollowBusy(true);
 
     try {
       const method = nextIsFollowing ? "POST" : "DELETE";
       const res = await apiFetch(`/users/${profile._id}/follow`, { method });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Failed to update follow status");
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Follow request failed (${res.status})`);
       }
 
-      if (data.data?.followers !== undefined) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            stats: { ...old.stats, followers: data.data.followers },
-          };
-        });
-      }
+      patchFollowState(
+        queryClient,
+        profile._id,
+        nextIsFollowing,
+        data.data?.followers
+      );
 
-      // Also invalidate following feed and suggestions so they stay fresh
-      queryClient.invalidateQueries({ queryKey: ["feed", "following"] });
-      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+      // Refresh every server-backed view that depends on the relationship.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
 
       toast.success(
         nextIsFollowing
@@ -231,17 +222,12 @@ export default function Profile() {
       );
     } catch (err) {
       // Rollback on error
-      queryClient.setQueryData(queryKeys.profile(id), (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          isFollowing: previousState.isFollowing,
-          stats: {
-            ...old.stats,
-            followers: previousState.followers,
-          },
-        };
-      });
+      patchFollowState(
+        queryClient,
+        profile._id,
+        previousState.isFollowing,
+        previousState.followers
+      );
       toast.error(err.message || "Network error. Please try again.");
     } finally {
       setFollowBusy(false);
