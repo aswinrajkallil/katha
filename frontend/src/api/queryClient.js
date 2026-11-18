@@ -144,3 +144,56 @@ export function seedPost(qc, post) {
 }
 
 export default queryClient;
+
+
+/**
+ * Keep follow state consistent across profile and sidebar caches.
+ * The server response supplies the authoritative follower count.
+ */
+export function patchFollowState(qc, userId, isFollowing, followersCount) {
+  if (!userId) return;
+  const targetId = String(userId);
+  const updateCount = (previous) => {
+    if (Number.isFinite(followersCount)) return followersCount;
+    return Math.max(0, (previous || 0) + (isFollowing ? 1 : -1));
+  };
+
+  qc.setQueriesData({ queryKey: ["profile"] }, (old) => {
+    if (!old || String(old._id) !== targetId) return old;
+    const wasFollowing = Boolean(old.isFollowing);
+    return {
+      ...old,
+      isFollowing,
+      stats: {
+        ...old.stats,
+        followers: wasFollowing === isFollowing
+          ? (Number.isFinite(followersCount) ? followersCount : old.stats?.followers ?? 0)
+          : updateCount(old.stats?.followers),
+      },
+    };
+  });
+
+  qc.setQueriesData({ queryKey: queryKeys.sidebarPosts() }, (old) => {
+    if (!old?.sections) return old;
+    return {
+      ...old,
+      sections: old.sections.map((section) => {
+        if (section.kind !== "authors" || !Array.isArray(section.items)) return section;
+        return {
+          ...section,
+          items: section.items.map((author) => {
+            if (String(author._id) !== targetId) return author;
+            const wasFollowing = Boolean(author.isFollowing);
+            return {
+              ...author,
+              isFollowing,
+              followersCount: wasFollowing === isFollowing
+                ? (Number.isFinite(followersCount) ? followersCount : author.followersCount ?? 0)
+                : updateCount(author.followersCount),
+            };
+          }),
+        };
+      }),
+    };
+  });
+}
