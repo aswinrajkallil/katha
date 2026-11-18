@@ -1,4 +1,5 @@
-import React, { useState } from "react";\nimport { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, MessageCircle, Eye, FileText, ChevronRight } from "lucide-react";
