@@ -81,7 +81,7 @@ export default function AuthorStripItem({
           }}
           disabled={followLoading}
         >
-          {author?.isFollowing ? "Following" : "Follow"}
+          {followLoading ? "Updating…" : author?.isFollowing ? "Following" : "Follow"}
         </button>
       )}
     </div>
