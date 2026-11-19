@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
@@ -14,6 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { useSocket } from "../context/SocketContext";
 import { useToast } from "../context/ToastContext";
 import apiFetch from "../api/api";
+import { queryKeys, patchFollowState } from "../api/queryClient";
 import PostCard from "../components/Posts/PostCard";
 import UserAvatar from "../components/UserAvatar";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -27,6 +29,7 @@ export default function FollowingFeed() {
   const { socket } = useSocket();
   const toast = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Feed State
   const [posts, setPosts] = useState([]);
@@ -46,6 +49,7 @@ export default function FollowingFeed() {
   // Suggested Users (for 0-following empty state)
   const [suggestions, setSuggestions] = useState([]);
   const [followingMap, setFollowingMap] = useState({}); // { [userId]: true }
+  const [followingPending, setFollowingPending] = useState({}); // duplicate-request guard
 
   // New Posts Polling State
   const [newPostsCount, setNewPostsCount] = useState(0);
@@ -207,47 +211,65 @@ export default function FollowingFeed() {
   // Follow a suggested user
   const handleFollowUser = async (targetUser) => {
     const targetId = targetUser._id || targetUser.id;
-    if (!targetId) return;
+    if (!targetId || followingMap[targetId] || followingPending[targetId]) return;
 
+    setFollowingPending((prev) => ({ ...prev, [targetId]: true }));
     try {
-      const res = await apiFetch(`/users/${targetId}/follow`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setFollowingMap((prev) => ({ ...prev, [targetId]: true }));
-        toast.success(`Following @${targetUser.username}`);
-        fetchFeed(1, false);
-      } else {
-        toast.error(data.message || "Failed to follow user");
+      const res = await apiFetch(`/users/${encodeURIComponent(targetId)}/follow`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Follow request failed (${res.status})`);
       }
-    } catch {
-      toast.error("Network error while following");
+
+      setFollowingMap((prev) => ({ ...prev, [targetId]: true }));
+      patchFollowState(queryClient, targetId, true, data.data?.followers);
+      toast.success(`Following @${targetUser.username}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
+      fetchFeed(1, false);
+    } catch (error) {
+      setFollowingMap((prev) => ({ ...prev, [targetId]: false }));
+      toast.error(error.message || "Failed to follow user");
+    } finally {
+      setFollowingPending((prev) => ({ ...prev, [targetId]: false }));
     }
   };
 
   // Unfollow confirmation action
   const handleConfirmUnfollow = async () => {
-    if (!unfollowTarget) return;
+    if (!unfollowTarget || unfollowLoading) return;
     setUnfollowLoading(true);
 
-    const targetId = unfollowTarget._id || unfollowTarget.id;
+    const target = unfollowTarget;
+    const targetId = target._id || target.id;
     try {
-      const res = await apiFetch(`/users/${targetId}/follow`, { method: "DELETE" });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        toast.success(`Unfollowed @${unfollowTarget.username}`);
-        setPeople((prev) => prev.filter((p) => p._id !== targetId));
-        setFollowingCount((prev) => Math.max(0, (prev || 1) - 1));
-        setPosts((prev) => prev.filter((post) => post.author?._id !== targetId));
-        if (selectedAuthor?._id === targetId) {
-          setSelectedAuthor(null);
-        }
-        setUnfollowTarget(null);
-      } else {
-        toast.error(data.message || "Failed to unfollow user");
+      const res = await apiFetch(`/users/${encodeURIComponent(targetId)}/follow`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Unfollow request failed (${res.status})`);
       }
-    } catch {
-      toast.error("Network error while unfollowing");
+
+      patchFollowState(queryClient, targetId, false, data.data?.followers);
+      setPeople((prev) => prev.filter((person) => (person._id || person.id) !== targetId));
+      setFollowingCount((prev) => Math.max(0, (prev || 1) - 1));
+      setPosts((prev) => prev.filter((post) => (post.author?._id || post.author?.id) !== targetId));
+      if ((selectedAuthor?._id || selectedAuthor?.id) === targetId) {
+        setSelectedAuthor(null);
+      }
+      setUnfollowTarget(null);
+      toast.success(`Unfollowed @${target.username}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
+    } catch (error) {
+      toast.error(error.message || "Failed to unfollow user");
     } finally {
       setUnfollowLoading(false);
     }
@@ -439,10 +461,13 @@ export default function FollowingFeed() {
                         className={`following-suggest-follow-btn ${
                           isFollowed ? "followed" : ""
                         }`}
-                        onClick={() => !isFollowed && handleFollowUser(sug)}
-                        disabled={isFollowed}
+                        onClick={() => handleFollowUser(sug)}
+                        disabled={isFollowed || Boolean(followingPending[targetId])}
+                        aria-busy={Boolean(followingPending[targetId])}
                       >
-                        {isFollowed ? (
+                        {followingPending[targetId] ? (
+                          "Following…"
+                        ) : isFollowed ? (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <UserCheck size={14} /> Following
                           </span>

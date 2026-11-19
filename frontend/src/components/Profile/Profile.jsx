@@ -24,7 +24,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useSocket, useUserRoom } from "../../context/SocketContext";
 import apiFetch, { apiQuery } from "../../api/api";
-import { queryKeys } from "../../api/queryClient";
+import { queryKeys, patchFollowState } from "../../api/queryClient";
 import PostList from "../Posts/PostList";
 import BackButton from "../BackButton";
 import ConfirmDialog from "../ConfirmDialog";
@@ -99,7 +99,8 @@ export default function Profile() {
     error: profileError,
     refetch: fetchProfile,
   } = useQuery({
-    queryKey: queryKeys.profile(id),
+    // Follow status belongs to the viewer, so separate cache entries by signed-in user.
+    queryKey: [...queryKeys.profile(id), currentUser?._id || currentUser?.id || "guest"],
     queryFn: () => apiQuery(`/users/${encodeURIComponent(id)}`),
     staleTime: 60 * 1000,
   });
@@ -137,10 +138,14 @@ export default function Profile() {
 
     const onFollowChanged = (data) => {
       if (data.targetUserId === profile._id) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+        queryClient.setQueriesData({ queryKey: queryKeys.profile(id) }, (old) => {
           if (!old) return old;
           return {
             ...old,
+            isFollowing:
+              String(data.actorId) === String(currentUser?._id || currentUser?.id || "")
+                ? Boolean(data.isFollowing)
+                : old.isFollowing,
             stats: {
               ...old.stats,
               followers: data.followersCount,
@@ -152,7 +157,7 @@ export default function Profile() {
 
     const onProfileUpdated = (data) => {
       if (data.userId === profile._id) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
+        queryClient.setQueriesData({ queryKey: queryKeys.profile(id) }, (old) => {
           if (!old) return old;
           return {
             ...old,
@@ -169,7 +174,7 @@ export default function Profile() {
       socket.off("follow:changed", onFollowChanged);
       socket.off("profile:updated", onProfileUpdated);
     };
-  }, [socket, profile?._id, id, queryClient]);
+  }, [socket, profile?._id, id, queryClient, currentUser?._id, currentUser?.id]);
 
   const handleFollowToggle = async () => {
     if (!currentUser) {
@@ -187,42 +192,33 @@ export default function Profile() {
     const nextFollowersCount = Math.max(0, previousState.followers + (nextIsFollowing ? 1 : -1));
 
     // Optimistic cache update in react-query
-    queryClient.setQueryData(queryKeys.profile(id), (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        isFollowing: nextIsFollowing,
-        stats: {
-          ...old.stats,
-          followers: nextFollowersCount,
-        },
-      };
-    });
+    patchFollowState(queryClient, profile._id, nextIsFollowing, nextFollowersCount);
 
     setFollowBusy(true);
 
     try {
       const method = nextIsFollowing ? "POST" : "DELETE";
       const res = await apiFetch(`/users/${profile._id}/follow`, { method });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Failed to update follow status");
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Follow request failed (${res.status})`);
       }
 
-      if (data.data?.followers !== undefined) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            stats: { ...old.stats, followers: data.data.followers },
-          };
-        });
-      }
+      patchFollowState(
+        queryClient,
+        profile._id,
+        nextIsFollowing,
+        data.data?.followers
+      );
 
-      // Also invalidate following feed and suggestions so they stay fresh
-      queryClient.invalidateQueries({ queryKey: ["feed", "following"] });
-      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+      // Refresh every server-backed view that depends on the relationship.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
 
       toast.success(
         nextIsFollowing
@@ -231,17 +227,12 @@ export default function Profile() {
       );
     } catch (err) {
       // Rollback on error
-      queryClient.setQueryData(queryKeys.profile(id), (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          isFollowing: previousState.isFollowing,
-          stats: {
-            ...old.stats,
-            followers: previousState.followers,
-          },
-        };
-      });
+      patchFollowState(
+        queryClient,
+        profile._id,
+        previousState.isFollowing,
+        previousState.followers
+      );
       toast.error(err.message || "Network error. Please try again.");
     } finally {
       setFollowBusy(false);

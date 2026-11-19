@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { useQueryClient } from "@tanstack/react-query";
 import apiFetch from "../api/api";
+import { queryKeys, patchFollowState } from "../api/queryClient";
 import PostCard from "../components/Posts/PostCard";
 import UserAvatar from "../components/UserAvatar";
 import HorizontalScroller from "../components/HorizontalScroller";
@@ -26,6 +28,8 @@ export default function Explore() {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const followRequestsRef = useRef(new Set());
 
   // 1. Popular Authors State
   const [authors, setAuthors] = useState([]);
@@ -54,6 +58,7 @@ export default function Explore() {
   // Follow / Unfollow Confirmation State
   const [unfollowTarget, setUnfollowTarget] = useState(null);
   const [unfollowLoading, setUnfollowLoading] = useState(false);
+  const [followPending, setFollowPending] = useState({});
 
   // Fetch Authors
   const fetchAuthors = useCallback(async () => {
@@ -189,112 +194,116 @@ export default function Explore() {
     }
 
     const authorId = author._id || author.id;
-    // Optimistic toggle
+    if (!authorId || followRequestsRef.current.has(authorId)) return;
+
+    const previousFollowing = Boolean(author.isFollowing);
+    const previousFollowers = author.followersCount ?? 0;
+    const optimisticFollowers = previousFollowers + 1;
+    followRequestsRef.current.add(authorId);
+    setFollowPending((prev) => ({ ...prev, [authorId]: true }));
+
     setAuthors((prev) =>
-      prev.map((a) =>
-        a._id === authorId
-          ? {
-              ...a,
-              isFollowing: true,
-              followersCount: (a.followersCount || 0) + 1,
-            }
-          : a
+      prev.map((item) =>
+        (item._id || item.id) === authorId
+          ? { ...item, isFollowing: true, followersCount: optimisticFollowers }
+          : item
       )
     );
+    patchFollowState(queryClient, authorId, true, optimisticFollowers);
 
     try {
-      const res = await apiFetch(`/users/${authorId}/follow`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`You are now following @${author.username}`);
-      } else {
-        // Rollback
-        setAuthors((prev) =>
-          prev.map((a) =>
-            a._id === authorId
-              ? {
-                  ...a,
-                  isFollowing: false,
-                  followersCount: Math.max(0, (a.followersCount || 1) - 1),
-                }
-              : a
-          )
-        );
-        toast.error(data.message || "Failed to follow author");
+      const res = await apiFetch(`/users/${encodeURIComponent(authorId)}/follow`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Follow request failed (${res.status})`);
       }
-    } catch {
-      // Rollback
+
+      patchFollowState(queryClient, authorId, true, data.data?.followers);
       setAuthors((prev) =>
-        prev.map((a) =>
-          a._id === authorId
-            ? {
-                ...a,
-                isFollowing: false,
-                followersCount: Math.max(0, (a.followersCount || 1) - 1),
-              }
-            : a
+        prev.map((item) =>
+          (item._id || item.id) === authorId
+            ? { ...item, followersCount: data.data?.followers ?? item.followersCount }
+            : item
         )
       );
-      toast.error("Network error while following");
+      toast.success(`You are now following @${author.username}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
+    } catch (error) {
+      setAuthors((prev) =>
+        prev.map((item) =>
+          (item._id || item.id) === authorId
+            ? { ...item, isFollowing: previousFollowing, followersCount: previousFollowers }
+            : item
+        )
+      );
+      patchFollowState(queryClient, authorId, previousFollowing, previousFollowers);
+      toast.error(error.message || "Failed to follow author");
+    } finally {
+      followRequestsRef.current.delete(authorId);
+      setFollowPending((prev) => ({ ...prev, [authorId]: false }));
     }
   };
 
   // Unfollow confirmation action (optimistic)
   const handleConfirmUnfollow = async () => {
-    if (!unfollowTarget) return;
+    if (!unfollowTarget || unfollowLoading) return;
     setUnfollowLoading(true);
 
-    const authorId = unfollowTarget._id || unfollowTarget.id;
-    const authorUsername = unfollowTarget.username;
+    const target = unfollowTarget;
+    const authorId = target._id || target.id;
+    const authorUsername = target.username;
+    const previousAuthor = authors.find((item) => (item._id || item.id) === authorId) || target;
+    const previousFollowing = Boolean(previousAuthor.isFollowing);
+    const previousFollowers = previousAuthor.followersCount ?? 0;
+    const optimisticFollowers = Math.max(0, previousFollowers - 1);
 
-    // Optimistic toggle
     setAuthors((prev) =>
-      prev.map((a) =>
-        a._id === authorId
-          ? {
-              ...a,
-              isFollowing: false,
-              followersCount: Math.max(0, (a.followersCount || 1) - 1),
-            }
-          : a
+      prev.map((item) =>
+        (item._id || item.id) === authorId
+          ? { ...item, isFollowing: false, followersCount: optimisticFollowers }
+          : item
       )
     );
+    patchFollowState(queryClient, authorId, false, optimisticFollowers);
 
     try {
-      const res = await apiFetch(`/users/${authorId}/follow`, { method: "DELETE" });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`Unfollowed @${authorUsername}`);
-        setUnfollowTarget(null);
-      } else {
-        // Rollback
-        setAuthors((prev) =>
-          prev.map((a) =>
-            a._id === authorId
-              ? {
-                  ...a,
-                  isFollowing: true,
-                  followersCount: (a.followersCount || 0) + 1,
-                }
-              : a
-          )
-        );
-        toast.error(data.message || "Failed to unfollow author");
+      const res = await apiFetch(`/users/${encodeURIComponent(authorId)}/follow`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.message || `Unfollow request failed (${res.status})`);
       }
-    } catch {
-      // Rollback
+
+      patchFollowState(queryClient, authorId, false, data.data?.followers);
       setAuthors((prev) =>
-        prev.map((a) =>
-          a._id === authorId
-            ? {
-                ...a,
-                isFollowing: true,
-                followersCount: (a.followersCount || 0) + 1,
-              }
-            : a
+        prev.map((item) =>
+          (item._id || item.id) === authorId
+            ? { ...item, followersCount: data.data?.followers ?? item.followersCount }
+            : item
         )
       );
-      toast.error("Network error while unfollowing");
+      toast.success(`Unfollowed @${authorUsername}`);
+      setUnfollowTarget(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() }),
+        queryClient.invalidateQueries({ queryKey: ["connections"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarPosts() }),
+      ]);
+    } catch (error) {
+      setAuthors((prev) =>
+        prev.map((item) =>
+          (item._id || item.id) === authorId
+            ? { ...item, isFollowing: previousFollowing, followersCount: previousFollowers }
+            : item
+        )
+      );
+      patchFollowState(queryClient, authorId, previousFollowing, previousFollowers);
+      toast.error(error.message || "Failed to unfollow author");
     } finally {
       setUnfollowLoading(false);
     }
@@ -354,6 +363,7 @@ export default function Explore() {
                   isSelected={isSelected}
                   showStats={true}
                   showFollowButton={true}
+                  followLoading={Boolean(followPending[author._id || author.id]) || (unfollowLoading && (unfollowTarget?._id || unfollowTarget?.id) === (author._id || author.id))}
                   onFollowToggle={(target) => {
                     if (target.isFollowing) {
                       setUnfollowTarget(target);

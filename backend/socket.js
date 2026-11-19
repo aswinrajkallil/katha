@@ -1,15 +1,13 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import { isAllowedOrigin } from "./config/cors.js";
 
 let ioInstance = null;
 
 export const initSocket = (httpServer, allowedOrigins) => {
     const io = new Server(httpServer, {
         cors: {
-            origin: (origin, callback) => {
-                if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-                callback(null, false);
-            },
+            origin: (origin, callback) => callback(null, isAllowedOrigin(origin, allowedOrigins)),
             credentials: true,
         }
     });
@@ -50,21 +48,15 @@ export const initSocket = (httpServer, allowedOrigins) => {
         });
 
         socket.on("join:post", (postId) => {
-            if (postId) {
-                socket.join(`post:${postId}`);
-            }
+            if (postId) socket.join(`post:${postId}`);
         });
 
         socket.on("leave:post", (postId) => {
-            if (postId) {
-                socket.leave(`post:${postId}`);
-            }
+            if (postId) socket.leave(`post:${postId}`);
         });
 
         socket.on("join:user", (userId) => {
-            if (userId) {
-                socket.join(`user:${userId}`);
-            }
+            if (userId) socket.join(`user:${userId}`);
         });
 
         socket.on("leave:user", (userId) => {
@@ -81,13 +73,9 @@ export const initSocket = (httpServer, allowedOrigins) => {
 export const getIO = () => ioInstance;
 
 export const emitToRoom = (room, event, data) => {
-    if (ioInstance && room) {
-        ioInstance.to(room).emit(event, data);
-    }
+    if (ioInstance && room) ioInstance.to(room).emit(event, data);
 };
 
 export const emitToAll = (event, data) => {
-    if (ioInstance) {
-        ioInstance.emit(event, data);
-    }
+    if (ioInstance) ioInstance.emit(event, data);
 };

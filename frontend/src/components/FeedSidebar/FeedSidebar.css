@@ -260,7 +260,18 @@
 .fs-follow-btn.is-following {
   border-color: #d1d5db;
   color: #6b7280;
-  cursor: default;
+  cursor: pointer;
+}
+
+.fs-follow-btn.is-following:hover:not(:disabled) {
+  border-color: #e8590c;
+  background: #fff3eb;
+  color: #c2410c;
+}
+
+.fs-follow-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 /* ---------- Loading + error ---------- */

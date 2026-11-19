@@ -10,7 +10,7 @@ const followUser = async (req, res) => {
     try {
         const { userId } = req.params;
         if (!isValidId(userId)) return res.status(400).json({ success: false, message: "Invalid user ID" });
-        if (userId === req.user.id) return res.status(400).json({ success: false, message: "You cannot follow yourself" });
+        if (String(userId) === String(req.user.id)) return res.status(400).json({ success: false, message: "You cannot follow yourself" });
         const target = await User.findById(userId).select("_id username");
         if (!target) return res.status(404).json({ success: false, message: "User not found" });
         try {
@@ -34,6 +34,7 @@ const unfollowUser = async (req, res) => {
     try {
         const { userId } = req.params;
         if (!isValidId(userId)) return res.status(400).json({ success: false, message: "Invalid user ID" });
+        if (String(userId) === String(req.user.id)) return res.status(400).json({ success: false, message: "You cannot unfollow yourself" });
         const result = await Follow.findOneAndDelete({ follower: req.user.id, following: userId });
         if (!result) return res.status(404).json({ success: false, message: "You are not following this user" });
         const followers = await Follow.countDocuments({ following: userId });
