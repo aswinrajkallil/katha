@@ -63,10 +63,46 @@ const postSchema = new mongoose.Schema(
         views: {
             type: Number,
             default: 0
+        },
+        // Soft delete: a deleted post stays in the database so it can be restored.
+        isDeleted: {
+            type: Boolean,
+            default: false
+        },
+        deletedAt: {
+            type: Date,
+            default: null
+        },
+        deletedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null
         }
     },
     { timestamps: true }
 );
+
+// Hide soft-deleted posts from every read by default, so no controller has to remember
+// to filter them. To read deleted posts, either filter on `isDeleted` explicitly
+// (e.g. { isDeleted: true }) or opt in with `.setOptions({ withDeleted: true })`.
+const FILTERED_QUERY_OPS = [
+    "find",
+    "findOne",
+    "findOneAndUpdate",
+    "findOneAndDelete",
+    "countDocuments"
+];
+
+postSchema.pre(FILTERED_QUERY_OPS, function () {
+    if (this.getOptions().withDeleted) return;
+    if (this.getFilter().isDeleted !== undefined) return;
+    this.where({ isDeleted: { $ne: true } });
+});
+
+postSchema.pre("aggregate", function () {
+    if (this.options?.withDeleted) return;
+    this.pipeline().unshift({ $match: { isDeleted: { $ne: true } } });
+});
 
 // Auto-generate unique slug from title
 postSchema.pre("save", async function () {
@@ -81,10 +117,11 @@ postSchema.pre("save", async function () {
 
         // Keep trying until we find a unique slug
         while (true) {
+            // Include soft-deleted posts: the unique slug index still covers them.
             const existing = await mongoose.model("Post").findOne({
                 slug,
                 _id: { $ne: this._id }
-            });
+            }).setOptions({ withDeleted: true });
             if (!existing) break;
             slug = `${baseSlug}-${count}`;
             count++;
@@ -98,6 +135,7 @@ postSchema.pre("save", async function () {
 postSchema.index({ author: 1, status: 1 });
 postSchema.index({ category: 1 });
 postSchema.index({ status: 1, createdAt: -1 });
+postSchema.index({ author: 1, isDeleted: 1, deletedAt: -1 });
 postSchema.index({ title: "text", content: "text" });
 
 const Post = mongoose.model("Post", postSchema);

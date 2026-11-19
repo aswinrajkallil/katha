@@ -19,11 +19,13 @@ import {
   X,
   AlertCircle,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useSocket, useUserRoom } from "../../context/SocketContext";
-import apiFetch, { apiQuery } from "../../api/api";
+import { apiQuery } from "../../api/api";
+import useFollowToggle from "../../hooks/useFollowToggle";
 import { queryKeys } from "../../api/queryClient";
 import PostList from "../Posts/PostList";
 import BackButton from "../BackButton";
@@ -102,7 +104,12 @@ export default function Profile() {
     queryKey: queryKeys.profile(id),
     queryFn: () => apiQuery(`/users/${encodeURIComponent(id)}`),
     staleTime: 60 * 1000,
+    // Follow state can change anywhere (right panel, feed, Explore): always re-check it
+    // when a profile opens, and never show another user's profile while this one loads.
+    refetchOnMount: "always",
+    placeholderData: undefined,
   });
+  const { follow } = useFollowToggle();
 
   const error = profileError ? profileError.message : "";
 
@@ -201,36 +208,12 @@ export default function Profile() {
 
     setFollowBusy(true);
 
-    try {
-      const method = nextIsFollowing ? "POST" : "DELETE";
-      const res = await apiFetch(`/users/${profile._id}/follow`, { method });
-      const data = await res.json();
+    // The hook also syncs every other cached copy of this profile, the following list
+    // and the feeds. It resolves to null when the request failed.
+    const result = await follow(profile, nextIsFollowing);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Failed to update follow status");
-      }
-
-      if (data.data?.followers !== undefined) {
-        queryClient.setQueryData(queryKeys.profile(id), (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            stats: { ...old.stats, followers: data.data.followers },
-          };
-        });
-      }
-
-      // Also invalidate following feed and suggestions so they stay fresh
-      queryClient.invalidateQueries({ queryKey: ["feed", "following"] });
-      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
-
-      toast.success(
-        nextIsFollowing
-          ? `You are now following @${profile.username}`
-          : `Unfollowed @${profile.username}`
-      );
-    } catch (err) {
-      // Rollback on error
+    if (!result) {
+      // Rollback the optimistic update
       queryClient.setQueryData(queryKeys.profile(id), (old) => {
         if (!old) return old;
         return {
@@ -242,10 +225,9 @@ export default function Profile() {
           },
         };
       });
-      toast.error(err.message || "Network error. Please try again.");
-    } finally {
-      setFollowBusy(false);
     }
+
+    setFollowBusy(false);
   };
 
   const handleCopyProfileLink = () => {
@@ -409,6 +391,15 @@ export default function Profile() {
                         >
                           <Pencil size={15} />
                           <span>Edit profile</span>
+                        </Link>
+                        <Link
+                          to="/deleted-posts"
+                          className="profile-overflow-item"
+                          onClick={() => setMenuOpen(false)}
+                          role="menuitem"
+                        >
+                          <Trash2 size={15} />
+                          <span>Deleted posts</span>
                         </Link>
                         <button
                           type="button"

@@ -203,8 +203,10 @@ function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = fals
     try {
       const res = await apiFetch(`/posts/${post._id}`, { method: "DELETE" });
       if (res.ok) {
-        toast.success("Post deleted successfully");
+        toast.success("Post moved to Deleted Posts");
         setConfirmOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["deleted-posts"] });
+        queryClient.invalidateQueries({ queryKey: ["sidebar"] });
         // Remove from queryClient
         queryClient.removeQueries({ queryKey: queryKeys.post(post._id) });
         queryClient.setQueriesData({ queryKey: ["posts"] }, (old) => {
@@ -484,7 +486,7 @@ function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = fals
       <ConfirmDialog
         isOpen={confirmOpen}
         title="Delete this post?"
-        message="This can't be undone. Your story and all its discussions will be permanently removed."
+        message="It will be moved to Deleted Posts, where you can restore it later."
         confirmText="Delete post"
         cancelText="Cancel"
         loading={deleting}

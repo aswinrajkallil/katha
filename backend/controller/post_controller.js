@@ -618,7 +618,8 @@ const updatePost = async (req, res) => {
     }
 };
 
-// DELETE /api/posts/:id — Delete a post
+// DELETE /api/posts/:id — Soft delete a post (moves it to Deleted Posts)
+// Likes, comments, bookmarks and the cover image are kept so the post can be restored.
 const deletePost = async (req, res) => {
     try {
         const { id } = req.params;
@@ -643,6 +644,134 @@ const deletePost = async (req, res) => {
             });
         }
 
+        post.isDeleted = true;
+        post.deletedAt = new Date();
+        post.deletedBy = req.user.id;
+        await post.save();
+
+        // Let open feeds drop the post straight away
+        emitToAll("post:deleted", { postId: id });
+        emitToRoom(`post:${id}`, "post:deleted", { postId: id });
+
+        return res.status(200).json({
+            success: true,
+            message: "Post moved to Deleted Posts",
+            data: { _id: post._id, deletedAt: post.deletedAt }
+        });
+    } catch (e) {
+        console.error("deletePost error:", e);
+        return res.status(500).json({ success: false, message: "Something went wrong" });
+    }
+};
+
+// GET /api/posts/deleted — Current user's soft-deleted posts, most recently deleted first
+const getDeletedPosts = async (req, res) => {
+    try {
+        const pageNum = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limitNum = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+        const skip = (pageNum - 1) * limitNum;
+
+        // Filtering on isDeleted explicitly bypasses the default "hide deleted" filter
+        const query = { author: req.user.id, isDeleted: true };
+
+        const [posts, total] = await Promise.all([
+            Post.find(query)
+                .select("title excerpt content type status coverImage videoUrl videoThumbnail views createdAt deletedAt")
+                .sort({ deletedAt: -1, _id: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+            Post.countDocuments(query)
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: "Deleted posts fetched",
+            data: {
+                posts: posts.map(({ content, ...rest }) => ({
+                    ...rest,
+                    excerpt: rest.excerpt || (content ? content.slice(0, 160) : null)
+                })),
+                pagination: {
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages: Math.ceil(total / limitNum)
+                }
+            }
+        });
+    } catch (e) {
+        console.error("getDeletedPosts error:", e);
+        return res.status(500).json({ success: false, message: "Something went wrong" });
+    }
+};
+
+// PATCH /api/posts/:id/restore — Bring a soft-deleted post back
+const restorePost = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!isValidId(id)) {
+            return res.status(400).json({ success: false, message: "Invalid post ID" });
+        }
+
+        const post = await Post.findOne({ _id: id, isDeleted: true });
+
+        if (!post) {
+            return res.status(404).json({ success: false, message: "Deleted post not found" });
+        }
+
+        const isAuthor = post.author.toString() === req.user.id;
+        const isAdmin = req.user.role === "admin";
+
+        if (!isAuthor && !isAdmin) {
+            return res.status(403).json({
+                success: false,
+                message: "You are not authorized to restore this post"
+            });
+        }
+
+        post.isDeleted = false;
+        post.deletedAt = null;
+        post.deletedBy = null;
+        await post.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Post restored",
+            data: { _id: post._id, status: post.status }
+        });
+    } catch (e) {
+        console.error("restorePost error:", e);
+        return res.status(500).json({ success: false, message: "Something went wrong" });
+    }
+};
+
+// DELETE /api/posts/:id/permanent — Permanently remove a post that is already in Deleted Posts
+const permanentlyDeletePost = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!isValidId(id)) {
+            return res.status(400).json({ success: false, message: "Invalid post ID" });
+        }
+
+        const post = await Post.findOne({ _id: id, isDeleted: true });
+
+        if (!post) {
+            return res.status(404).json({ success: false, message: "Deleted post not found" });
+        }
+
+        const isAuthor = post.author.toString() === req.user.id;
+        const isAdmin = req.user.role === "admin";
+
+        if (!isAuthor && !isAdmin) {
+            return res.status(403).json({
+                success: false,
+                message: "You are not authorized to delete this post"
+            });
+        }
+
         // Clean up associated data
         await Promise.all([
             Like.deleteMany({ post: id }),
@@ -650,7 +779,7 @@ const deletePost = async (req, res) => {
             Comment.deleteMany({ post: id })
         ]);
 
-        await Post.findByIdAndDelete(id);
+        await Post.deleteOne({ _id: id });
 
         // Delete the Cloudinary asset if this post has one.
         // Legacy local-upload images have no public ID and are left untouched.
@@ -666,10 +795,10 @@ const deletePost = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: "Post deleted successfully"
+            message: "Post permanently deleted"
         });
     } catch (e) {
-        console.error("deletePost error:", e);
+        console.error("permanentlyDeletePost error:", e);
         return res.status(500).json({ success: false, message: "Something went wrong" });
     }
 };
@@ -912,5 +1041,8 @@ export {
     getPostBySlug,
     getPostById,
     updatePost,
-    deletePost
+    deletePost,
+    getDeletedPosts,
+    restorePost,
+    permanentlyDeletePost
 };

@@ -100,6 +100,13 @@ export const ROUTE_DEFS = [
     tabId: "bookmarks",
   },
   {
+    path: "/deleted-posts",
+    exact: true,
+    isTopLevel: false,
+    title: "Deleted posts",
+    tabId: null,
+  },
+  {
     path: "/notifications",
     exact: true,
     isTopLevel: false,

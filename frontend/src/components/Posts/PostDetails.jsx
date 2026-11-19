@@ -247,8 +247,10 @@ export default function PostDetails() {
     try {
       const res = await apiFetch(`/posts/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
-      toast.success("Post deleted successfully");
+      toast.success("Post moved to Deleted Posts");
       queryClient.removeQueries({ queryKey: queryKeys.post(id) });
+      queryClient.invalidateQueries({ queryKey: ["deleted-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["sidebar"] });
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["feed"] });
       queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
@@ -515,7 +517,7 @@ export default function PostDetails() {
       <ConfirmDialog
         isOpen={confirmDelete}
         title="Delete this post?"
-        message="This action cannot be undone. Your post and all comments will be removed."
+        message="It will be moved to Deleted Posts, where you can restore it later."
         confirmText="Delete"
         cancelText="Cancel"
         loading={deleting}

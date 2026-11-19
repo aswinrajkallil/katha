@@ -222,11 +222,7 @@ const PostList = ({ authorId, showDrafts = false, myPosts = false, bookmarks = f
                     </div>
                 ) : (
                     posts.map(post => (
-                        <PostCard
-                            key={post._id}
-                            post={post}
-                            onDelete={deletedId => setPosts(current => current.filter(item => item._id !== deletedId))}
-                        />
+                        <PostCard key={post._id} post={post} />
                     ))
                 )
             )}
