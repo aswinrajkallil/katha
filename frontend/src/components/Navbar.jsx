@@ -197,7 +197,7 @@ export default function Navbar() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => handleInputKeyDown(e, false)}
-              placeholder="Search stories, ideas, videos... (Press / to focus)"
+              placeholder="Search stories, ideas, videos..."
               aria-label="Search stories, ideas, videos"
             />
 
