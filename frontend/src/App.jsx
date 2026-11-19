@@ -19,6 +19,7 @@ const Home = lazy(() => import("./pages/Home"));
 const Explore = lazy(() => import("./pages/Explore"));
 const MyPosts = lazy(() => import("./pages/MyPosts"));
 const Bookmarks = lazy(() => import("./pages/Bookmarks"));
+const DeletedPosts = lazy(() => import("./pages/DeletedPosts"));
 const FollowingFeed = lazy(() => import("./pages/FollowingFeed"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Connections = lazy(() => import("./pages/Connections"));
@@ -90,6 +91,7 @@ function AppRoutes() {
                     <Route path="/posts/:id/edit" element={<ProtectedRoute><EditPost /></ProtectedRoute>} />
                     <Route path="/my-posts" element={<ProtectedRoute><MyPosts /></ProtectedRoute>} />
                     <Route path="/bookmarks" element={<ProtectedRoute><Bookmarks /></ProtectedRoute>} />
+                    <Route path="/deleted-posts" element={<ProtectedRoute><DeletedPosts /></ProtectedRoute>} />
                     <Route path="/feed/following" element={<ProtectedRoute><FollowingFeed /></ProtectedRoute>} />
                     <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
                     <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />

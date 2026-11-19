@@ -1,5 +1,7 @@
 /* =========================================
-   DESKTOP SIDEBAR (Reddit-style)
+   DESKTOP SIDEBAR (expandable rows)
+   Every row opens downward: Following lists who you follow,
+   My Posts / Bookmarks / Deleted Posts list your latest, etc.
 ========================================= */
 
 .desktop-sidebar {
@@ -9,7 +11,7 @@
 @media (min-width: 1024px) {
   .desktop-sidebar {
     display: block;
-    width: 240px;
+    width: 256px;
     flex-shrink: 0;
     position: sticky;
     top: 64px; /* navbar height on desktop */
@@ -17,11 +19,20 @@
     overflow-y: auto;
     background: #ffffff;
     border-right: 1px solid var(--color-border, #e8eaed);
-    padding: 1.25rem 0.85rem;
+    padding: 1rem 0.75rem 2rem;
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
   }
 
   .desktop-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  /* ---------- Group heading (also a toggle) ---------- */
+  .sb-group {
     display: flex;
     flex-direction: column;
   }
@@ -32,11 +43,42 @@
     color: var(--color-text-secondary, #70757a);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin: 0 0 0.5rem 0.6rem;
+    margin: 0 0 0.35rem;
   }
 
-  .sidebar-section-title + .sidebar-section-title {
-    margin-top: 1.25rem;
+  .sb-group-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sb-group-toggle:hover {
+    background: #f9fafb;
+    color: #374151;
+  }
+
+  .sb-group-toggle:focus-visible,
+  .sb-chevron:focus-visible,
+  .sb-link:focus-visible,
+  .sb-sublink:focus-visible {
+    outline: 2px solid #e8590c;
+    outline-offset: -2px;
+  }
+
+  .sb-group-chevron {
+    transition: transform 0.2s ease;
+  }
+
+  .sb-group-chevron.is-collapsed {
+    transform: rotate(-90deg);
   }
 
   .sidebar-list {
@@ -48,20 +90,38 @@
     gap: 4px;
   }
 
-  .sidebar-link {
+  /* ---------- Row: link + chevron ---------- */
+  .sb-row {
+    display: flex;
+    align-items: center;
+    border-radius: 10px;
+    background: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sb-row:hover {
+    background-color: #f9fafb;
+  }
+
+  .sb-link {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 12px;
     min-height: 44px;
-    padding: 6px 10px;
+    padding: 6px 4px 6px 10px;
     border-radius: 10px;
     font-size: 0.925rem;
     font-weight: 500;
     color: var(--color-text-primary, #202124);
     text-decoration: none;
-    background: transparent;
-    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
     user-select: none;
+    transition: transform 0.1s ease;
+  }
+
+  .sb-link:active {
+    transform: scale(0.98);
   }
 
   /* Rounded icon tile */
@@ -85,31 +145,213 @@
     text-overflow: ellipsis;
   }
 
-  /* Hover background */
-  .sidebar-link:hover {
-    background-color: #f9fafb;
-    color: #111827;
-  }
-
-  .sidebar-link:hover .sidebar-icon-tile {
+  .sb-row:hover .sidebar-icon-tile {
     background-color: #e5e7eb;
     color: #111827;
   }
 
-  /* Press (scale) effect */
-  .sidebar-link:active {
-    transform: scale(0.97);
+  .sb-chevron {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    margin-right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
 
-  /* Active state: light orange background, solid orange icon tile with white icon */
-  .sidebar-link.active {
+  .sb-chevron:hover {
+    background: #e5e7eb;
+    color: #111827;
+  }
+
+  .sb-chevron svg {
+    transition: transform 0.2s ease;
+  }
+
+  .sb-item.is-open .sb-chevron svg {
+    transform: rotate(180deg);
+  }
+
+  /* Active page: light orange row, solid orange icon tile */
+  .sb-row.active {
     background-color: #fff7ed;
+  }
+
+  .sb-row.active .sb-link {
     color: #e8590c;
     font-weight: 600;
   }
 
-  .sidebar-link.active .sidebar-icon-tile {
+  .sb-row.active .sidebar-icon-tile {
     background-color: #e8590c;
     color: #ffffff;
+  }
+
+  .sb-row.active .sb-chevron {
+    color: #e8590c;
+  }
+
+  /* ---------- Expanded panel ---------- */
+  .sb-panel {
+    margin: 2px 0 6px 26px;
+    padding-left: 10px;
+    border-left: 2px solid #f1f2f4;
+    animation: sb-expand 0.16s ease-out;
+  }
+
+  @keyframes sb-expand {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .sb-sublist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sb-sublist-caption {
+    margin: 4px 0 2px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #9ca3af;
+  }
+
+  .sb-sublink {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #4b5563;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sb-sublink:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+
+  .sb-sublink.is-current {
+    background: #fff7ed;
+    color: #e8590c;
+    font-weight: 600;
+  }
+
+  .sb-sublink-text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sb-person :is(img, div) {
+    flex-shrink: 0;
+  }
+
+  .sb-badge {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.68rem;
+    font-weight: 600;
+  }
+
+  .sb-view-all {
+    color: #e8590c;
+    font-weight: 500;
+  }
+
+  .sb-view-all:hover {
+    background: #fff7ed;
+    color: #c2410c;
+  }
+
+  /* ---------- Empty / error / loading ---------- */
+  .sb-panel-message {
+    margin: 4px 0;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #6b7280;
+  }
+
+  .sb-inline-link,
+  .sb-retry {
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-weight: 500;
+    color: #e8590c;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .sb-inline-link:hover,
+  .sb-retry:hover {
+    text-decoration: underline;
+  }
+
+  .sb-skeleton-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .sb-skeleton {
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #eceef0 25%, #f6f7f8 37%, #eceef0 63%);
+    background-size: 400% 100%;
+    animation: sb-shimmer 1.3s ease infinite;
+  }
+
+  .sb-skeleton.short {
+    width: 60%;
+  }
+
+  @keyframes sb-shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0 50%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sb-panel,
+    .sb-skeleton,
+    .sb-group-chevron,
+    .sb-chevron svg {
+      animation: none;
+      transition: none;
+    }
   }
 }

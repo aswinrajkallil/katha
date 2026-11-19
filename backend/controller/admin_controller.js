@@ -340,7 +340,7 @@ export const deleteAdminUser = async (req, res) => {
         }
 
         // 1. Destroy each of the user's post cover images from Cloudinary and delete their posts
-        const userPosts = await Post.find({ author: id }).select("_id coverImagePublicId");
+        const userPosts = await Post.find({ author: id }).setOptions({ withDeleted: true }).select("_id coverImagePublicId");
         const postIds = userPosts.map(p => p._id);
 
         for (const p of userPosts) {

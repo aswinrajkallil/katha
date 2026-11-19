@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Heart, MessageCircle, Eye, FileText, ChevronRight } from "lucide-react";
-import apiFetch, { apiQuery } from "../../api/api";
+import { apiQuery } from "../../api/api";
+import useFollowToggle from "../../hooks/useFollowToggle";
 import { queryKeys } from "../../api/queryClient";
 import { useAuth } from "../../context/AuthContext";
-import { useToast } from "../../context/ToastContext";
 import { mediaUrl } from "../../utils/media";
 import UserAvatar from "../UserAvatar";
 import "./FeedSidebar.css";
@@ -95,33 +95,24 @@ const PostRow = React.memo(function PostRow({ post, rank }) {
 });
 
 /* ---------------------------------------------------------------
-   Author row with a Follow button (logged-in users only)
+   Author row with a Follow / Unfollow toggle (logged-in users only)
 ---------------------------------------------------------------- */
 const AuthorRow = React.memo(function AuthorRow({ author }) {
   const { user } = useAuth();
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const [following, setFollowing] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const { follow, isPending } = useFollowToggle();
+  // Authors in this list are people you do not follow yet, unless the API says otherwise
+  const [following, setFollowing] = useState(Boolean(author.isFollowing));
+  const busy = isPending(author._id);
 
   const displayName = author.fullName || author.username;
   const profilePath = `/profile/${author.username}`;
 
-  const handleFollow = async () => {
-    if (busy || following) return;
-    setBusy(true);
-    setFollowing(true); // optimistic
-    try {
-      const res = await apiFetch(`/users/${author._id}/follow`, { method: "POST" });
-      if (!res.ok) throw new Error("follow failed");
-      queryClient.invalidateQueries({ queryKey: ["feed"] });
-      queryClient.invalidateQueries({ queryKey: ["connections"] });
-    } catch {
-      setFollowing(false);
-      toast.error("Couldn't follow. Please try again.");
-    } finally {
-      setBusy(false);
-    }
+  const handleToggle = async () => {
+    if (busy) return;
+    const next = !following;
+    setFollowing(next); // optimistic
+    const result = await follow(author, next);
+    if (!result) setFollowing(!next); // roll back on failure
   };
 
   return (
@@ -150,10 +141,19 @@ const AuthorRow = React.memo(function AuthorRow({ author }) {
         <button
           type="button"
           className={`fs-follow-btn ${following ? "is-following" : ""}`}
-          onClick={handleFollow}
-          disabled={busy || following}
+          onClick={handleToggle}
+          disabled={busy}
+          aria-pressed={following}
+          aria-label={following ? `Unfollow @${author.username}` : `Follow @${author.username}`}
         >
-          {following ? "Following" : "Follow"}
+          {following ? (
+            <>
+              <span className="fs-follow-label-default">Following</span>
+              <span className="fs-follow-label-hover">Unfollow</span>
+            </>
+          ) : (
+            "Follow"
+          )}
         </button>
       )}
     </li>

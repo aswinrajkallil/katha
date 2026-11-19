@@ -257,10 +257,37 @@
   color: #fff;
 }
 
+.fs-follow-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Following state: shows "Following", and "Unfollow" on hover/focus so it is clearly clickable */
 .fs-follow-btn.is-following {
   border-color: #d1d5db;
   color: #6b7280;
-  cursor: default;
+  min-width: 92px;
+}
+
+.fs-follow-btn.is-following:hover:not(:disabled),
+.fs-follow-btn.is-following:focus-visible {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.fs-follow-label-hover {
+  display: none;
+}
+
+.fs-follow-btn.is-following:hover:not(:disabled) .fs-follow-label-default,
+.fs-follow-btn.is-following:focus-visible .fs-follow-label-default {
+  display: none;
+}
+
+.fs-follow-btn.is-following:hover:not(:disabled) .fs-follow-label-hover,
+.fs-follow-btn.is-following:focus-visible .fs-follow-label-hover {
+  display: inline;
 }
 
 /* ---------- Loading + error ---------- */
