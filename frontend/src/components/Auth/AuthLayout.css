@@ -1,0 +1,224 @@
+/* =========================================
+   AUTH STANDALONE LAYOUT (Login & Register)
+========================================= */
+
+.auth-layout-wrapper {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: #ffffff;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* =========================================
+   BRAND PANEL (Split Screen Left Half)
+========================================= */
+
+.auth-brand-panel {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  .auth-brand-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex: 1 1 50%;
+    max-width: 50%;
+    min-height: 100vh;
+    padding: 56px 64px 40px 64px;
+    background: linear-gradient(135deg, #e8590c 0%, #ff7828 100%);
+    color: #ffffff;
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Decorative soft background glow */
+  .auth-brand-panel::before {
+    content: "";
+    position: absolute;
+    top: -120px;
+    right: -120px;
+    width: 360px;
+    height: 360px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .auth-brand-content {
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: auto 0;
+  }
+
+  .auth-brand-logo-link {
+    display: inline-flex;
+    text-decoration: none;
+    margin-bottom: 40px;
+  }
+
+  .auth-brand-logo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 8px 18px 8px 10px;
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .auth-brand-k {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: #ffffff;
+    color: #e8590c;
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1;
+    font-family: inherit;
+  }
+
+  .auth-brand-word {
+    font-size: 20px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+  }
+
+  .auth-brand-hero {
+    margin-bottom: 36px;
+  }
+
+  .auth-brand-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    margin: 0 0 16px 0;
+    color: #ffffff;
+  }
+
+  .auth-brand-tagline {
+    font-size: 1.1rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.92);
+    margin: 0;
+  }
+
+  .auth-features-list {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .auth-feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .auth-feature-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    flex-shrink: 0;
+  }
+
+  .auth-feature-text h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 4px 0;
+  }
+
+  .auth-feature-text p {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.85);
+    margin: 0;
+  }
+
+  .auth-brand-footer {
+    padding-top: 24px;
+    font-size: 0.825rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+}
+
+/* =========================================
+   FORM CONTAINER (Right Half on Desktop / Full Screen on Mobile)
+========================================= */
+
+.auth-main-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1 1 50%;
+  min-height: 100vh;
+  padding: 40px 24px;
+  background-color: #ffffff;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.auth-form-card {
+  width: 100%;
+  max-width: 400px;
+  box-sizing: border-box;
+  margin: auto 0;
+}
+
+/* Mobile-only compact logo */
+.auth-mobile-header {
+  display: none;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-mobile-logo {
+  height: 38px;
+  width: auto;
+  display: inline-block;
+}
+
+@media (max-width: 900px) {
+  .auth-main-panel {
+    flex: 1 1 100%;
+    padding: 32px 20px;
+    justify-content: flex-start;
+  }
+
+  .auth-mobile-header {
+    display: block;
+  }
+
+  .auth-form-card {
+    margin: 12px auto 32px auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-main-panel {
+    padding: 24px 16px;
+  }
+
+  .auth-mobile-header {
+    margin-bottom: 20px;
+  }
+}

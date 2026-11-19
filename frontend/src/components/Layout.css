@@ -1,0 +1,29 @@
+/* =========================================
+   APP LAYOUT (Navbar + Desktop Sidebar + Main)
+========================================= */
+
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-main-content {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Extra bottom padding on mobile screens so content clears the FAB */
+@media (max-width: 1023px) {
+  .app-main-content {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+}

@@ -1,0 +1,114 @@
+/* Theme variables and base styles for Kathā (orange theme) */
+:root {
+  /* Orange colour palette */
+  --color-primary: #FF7518;
+  --color-primary-dark: #E66A15;
+  --color-primary-light: #FFE5D0;
+  --color-on-primary: #ffffff;
+
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #F7F8FA;
+  --color-text-primary: #202124;
+  --color-text-secondary: #70757A;
+  --color-border: #E8EAED;
+  --color-hover: #f3f4f6;
+
+  /* Font settings */
+  --font-family-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-size-base: 16px;
+  --line-height-base: 1.5;
+}
+
+/* Global reset & base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+/* DO NOT style every button globally — only opt-in classes */
+
+/* Primary button class — use on CTA buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+.btn-primary:hover {
+  background-color: var(--color-primary-dark);
+}
+
+/* Danger button (logout etc.) */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  background-color: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+/* Utility classes */
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 1rem; }
+.mb-1 { margin-bottom: 0.25rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-3 { margin-bottom: 1rem; }
+.p-1 { padding: 0.25rem; }
+.p-2 { padding: 0.5rem; }
+.p-3 { padding: 1rem; }
+.text-center { text-align: center; }
+
+/* Image handling */
+.post-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+/* Card base */
+.card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}

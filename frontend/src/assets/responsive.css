@@ -1,0 +1,42 @@
+/* Responsive utilities for Kathā */
+/* Mobile first */
+
+/* Container breakpoints */
+@media (min-width: 576px) {
+  .container {
+    max-width: 540px;
+  }
+}
+@media (min-width: 768px) {
+  .container {
+    max-width: 720px;
+  }
+}
+@media (min-width: 992px) {
+  .container {
+    max-width: 960px;
+  }
+}
+@media (min-width: 1200px) {
+  .container {
+    max-width: 1140px;
+  }
+}
+
+/* Post Card responsive */
+.post-card {
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 768px) {
+  .post-card {
+    flex-direction: row;
+  }
+}
+
+/* Comment thread indentation */
+.comment-item {
+  margin-left: 1rem;
+  border-left: 2px solid var(--color-border);
+  padding-left: 0.5rem;
+}
