@@ -71,7 +71,11 @@ export const getAdminUsers = async (req, res) => {
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
         const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-        const filter = {};
+        // ?deleted=true lists soft-deleted accounts; otherwise only active ones
+        const showDeleted = req.query.deleted === "true";
+
+        // Filtering on isDeleted explicitly bypasses the default "hide deleted" filter
+        const filter = showDeleted ? { isDeleted: true } : {};
         if (search) {
             const regex = new RegExp(escapeRegex(search), "i");
             filter.$or = [{ username: regex }, { email: regex }, { fullName: regex }];
@@ -79,8 +83,8 @@ export const getAdminUsers = async (req, res) => {
 
         const [users, total] = await Promise.all([
             User.find(filter)
-                .select("username fullName email role createdAt profileImage")
-                .sort({ createdAt: -1 })
+                .select("username fullName email role createdAt profileImage isDeleted deletedAt")
+                .sort(showDeleted ? { deletedAt: -1, _id: -1 } : { createdAt: -1 })
                 .skip((page - 1) * limit)
                 .limit(limit)
                 .lean(),
@@ -88,10 +92,13 @@ export const getAdminUsers = async (req, res) => {
         ]);
 
         const userIds = users.map(u => u._id);
-        const postCounts = await Post.aggregate([
+        // A deleted account's posts are soft-deleted with it, so count them too in that view
+        const postCountQuery = Post.aggregate([
             { $match: { author: { $in: userIds } } },
             { $group: { _id: "$author", count: { $sum: 1 } } }
         ]);
+        if (showDeleted) postCountQuery.option({ withDeleted: true });
+        const postCounts = await postCountQuery;
         const postCountMap = new Map(postCounts.map(item => [item._id.toString(), item.count]));
 
         const enrichedUsers = users.map(u => ({
@@ -122,12 +129,15 @@ export const getAdminUserById = async (req, res) => {
     try {
         const { id } = req.params;
         const query = isValidId(id) ? { _id: id } : { username: String(id).toLowerCase() };
-        const user = await User.findOne(query).select("-password -refreshToken").lean();
+        // withDeleted: admins can open a soft-deleted account to restore or purge it
+        const user = await User.findOne(query).setOptions({ withDeleted: true }).select("-password -refreshToken").lean();
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
         const userId = user._id;
+        // A deleted account's posts are soft-deleted with it, so count them too in that case
+        const postOptions = user.isDeleted ? { withDeleted: true } : {};
         const [postsCount, commentsCount, followersCount, followingCount] = await Promise.all([
-            Post.countDocuments({ author: userId }),
+            Post.countDocuments({ author: userId }).setOptions(postOptions),
             Comment.countDocuments({ author: userId, isDeleted: false }),
             Follow.countDocuments({ following: userId }),
             Follow.countDocuments({ follower: userId })
@@ -156,7 +166,7 @@ export const getAdminUserPosts = async (req, res) => {
     try {
         const { id } = req.params;
         const queryUser = isValidId(id) ? { _id: id } : { username: String(id).toLowerCase() };
-        const user = await User.findOne(queryUser).select("_id");
+        const user = await User.findOne(queryUser).setOptions({ withDeleted: true }).select("_id isDeleted");
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
@@ -168,14 +178,18 @@ export const getAdminUserPosts = async (req, res) => {
             postFilter.status = status;
         }
 
+        // For a soft-deleted account, show its (also soft-deleted) posts instead of an empty list
+        const postOptions = user.isDeleted ? { withDeleted: true } : {};
+
         const [posts, total] = await Promise.all([
             Post.find(postFilter)
+                .setOptions(postOptions)
                 .populate("category", "name slug")
                 .sort({ createdAt: -1 })
                 .skip((page - 1) * limit)
                 .limit(limit)
                 .lean(),
-            Post.countDocuments(postFilter)
+            Post.countDocuments(postFilter).setOptions(postOptions)
         ]);
 
         const postIds = posts.map(p => p._id);
@@ -225,7 +239,11 @@ export const getAdminPosts = async (req, res) => {
         const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
         const status = req.query.status;
 
-        const filter = {};
+        // ?deleted=true lists soft-deleted posts; otherwise only live ones.
+        // Filtering on isDeleted explicitly bypasses the default "hide deleted" filter.
+        const showDeleted = req.query.deleted === "true";
+
+        const filter = showDeleted ? { isDeleted: true } : {};
         if (status && ["draft", "published"].includes(status)) {
             filter.status = status;
         }
@@ -236,9 +254,15 @@ export const getAdminPosts = async (req, res) => {
 
         const [posts, total] = await Promise.all([
             Post.find(filter)
-                .populate("author", "username fullName profileImage email")
+                // withDeleted on the populate so a post whose author was also soft-deleted
+                // still shows that author instead of "[deleted author]"
+                .populate({
+                    path: "author",
+                    select: "username fullName profileImage email isDeleted",
+                    options: { withDeleted: true }
+                })
                 .populate("category", "name slug")
-                .sort({ createdAt: -1 })
+                .sort(showDeleted ? { deletedAt: -1, _id: -1 } : { createdAt: -1 })
                 .skip((page - 1) * limit)
                 .limit(limit)
                 .lean(),
@@ -284,14 +308,75 @@ export const getAdminPosts = async (req, res) => {
     }
 };
 
-// DELETE /api/admin/posts/:id
+// DELETE /api/admin/posts/:id — soft delete: hide the post but keep everything so it can be restored
 export const deleteAdminPost = async (req, res) => {
     try {
         const { id } = req.params;
         if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid post ID" });
 
+        // Soft-deleted posts are hidden from findById, so an already-deleted post is a 404 here
         const post = await Post.findById(id);
         if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+        post.isDeleted = true;
+        post.deletedAt = new Date();
+        post.deletedBy = req.adminUser._id;
+        await post.save();
+
+        // Broadcast realtime post:deleted so open feeds immediately remove it
+        emitToAll("post:deleted", { postId: id });
+        emitToRoom(`post:${id}`, "post:deleted", { postId: id });
+
+        return res.json({ success: true, message: "Post moved to deleted posts" });
+    } catch (err) {
+        console.error("deleteAdminPost error:", err);
+        return res.status(500).json({ success: false, message: "Failed to delete post" });
+    }
+};
+
+// PATCH /api/admin/posts/:id/restore
+export const restoreAdminPost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid post ID" });
+
+        const post = await Post.findOne({ _id: id, isDeleted: true });
+        if (!post) return res.status(404).json({ success: false, message: "Deleted post not found" });
+
+        // The post would reappear with no author while the author's account is deleted
+        const authorDeleted = await User.exists({ _id: post.author, isDeleted: true });
+        if (authorDeleted) {
+            return res.status(409).json({
+                success: false,
+                message: "The author's account is deleted. Restore the account first."
+            });
+        }
+
+        post.isDeleted = false;
+        post.deletedAt = null;
+        post.deletedBy = null;
+        await post.save();
+
+        return res.json({ success: true, message: "Post restored" });
+    } catch (err) {
+        console.error("restoreAdminPost error:", err);
+        return res.status(500).json({ success: false, message: "Failed to restore post" });
+    }
+};
+
+// DELETE /api/admin/posts/:id/permanent — remove a post that is already soft-deleted, for good
+export const permanentlyDeleteAdminPost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid post ID" });
+
+        const post = await Post.findOne({ _id: id, isDeleted: true });
+        if (!post) {
+            return res.status(404).json({
+                success: false,
+                message: "Deleted post not found. Move it to deleted posts first."
+            });
+        }
 
         // Clean up associated data
         await Promise.all([
@@ -309,20 +394,17 @@ export const deleteAdminPost = async (req, res) => {
             }
         }
 
-        await Post.findByIdAndDelete(id);
+        // deleteOne is not filtered, so it removes the soft-deleted document
+        await Post.deleteOne({ _id: id });
 
-        // Broadcast realtime post:deleted so open feeds immediately remove it
-        emitToAll("post:deleted", { postId: id });
-        emitToRoom(`post:${id}`, "post:deleted", { postId: id });
-
-        return res.json({ success: true, message: "Post deleted by admin" });
+        return res.json({ success: true, message: "Post permanently deleted" });
     } catch (err) {
-        console.error("deleteAdminPost error:", err);
+        console.error("permanentlyDeleteAdminPost error:", err);
         return res.status(500).json({ success: false, message: "Failed to delete post" });
     }
 };
 
-// DELETE /api/admin/users/:id
+// DELETE /api/admin/users/:id — soft delete: deactivate the account and hide its posts
 export const deleteAdminUser = async (req, res) => {
     try {
         const { id } = req.params;
@@ -332,8 +414,98 @@ export const deleteAdminUser = async (req, res) => {
             return res.status(400).json({ success: false, message: "Cannot delete your own admin account" });
         }
 
+        // Soft-deleted users are hidden from findById, so an already-deleted user is a 404 here
         const targetUser = await User.findById(id);
         if (!targetUser) return res.status(404).json({ success: false, message: "User not found" });
+
+        if (targetUser.role === "admin") {
+            return res.status(403).json({ success: false, message: "Cannot delete another admin account" });
+        }
+
+        const now = new Date();
+
+        // Only posts that are live right now get hidden. Posts the author deleted earlier keep
+        // their own deletedAt, so restoring the account never brings those back.
+        const livePosts = await Post.find({ author: id }).select("_id").lean();
+        const livePostIds = livePosts.map(p => p._id);
+
+        await Promise.all([
+            // refreshToken cleared so existing sessions cannot be refreshed
+            User.updateOne(
+                { _id: id },
+                { isDeleted: true, deletedAt: now, deletedBy: req.adminUser._id, refreshToken: null }
+            ),
+            Post.updateMany(
+                { _id: { $in: livePostIds } },
+                { isDeleted: true, deletedAt: now, deletedBy: req.adminUser._id }
+            )
+        ]);
+
+        // Broadcast realtime events so the posts disappear from open feeds
+        for (const postId of livePostIds) {
+            emitToAll("post:deleted", { postId: postId.toString() });
+        }
+
+        return res.json({
+            success: true,
+            message: `User @${targetUser.username} deleted. ${livePostIds.length} post(s) were hidden.`
+        });
+    } catch (err) {
+        console.error("deleteAdminUser error:", err);
+        return res.status(500).json({ success: false, message: "Failed to delete user" });
+    }
+};
+
+// PATCH /api/admin/users/:id/restore
+export const restoreAdminUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid user ID" });
+
+        const targetUser = await User.findOne({ _id: id, isDeleted: true });
+        if (!targetUser) return res.status(404).json({ success: false, message: "Deleted user not found" });
+
+        const deletedAt = targetUser.deletedAt;
+
+        await User.updateOne({ _id: id }, { isDeleted: false, deletedAt: null, deletedBy: null });
+
+        // Bring back only the posts that were hidden together with the account (same deletedAt)
+        let restoredPosts = 0;
+        if (deletedAt) {
+            const result = await Post.updateMany(
+                { author: id, isDeleted: true, deletedAt },
+                { isDeleted: false, deletedAt: null, deletedBy: null }
+            );
+            restoredPosts = result.modifiedCount || 0;
+        }
+
+        return res.json({
+            success: true,
+            message: `User @${targetUser.username} restored. ${restoredPosts} post(s) are visible again.`
+        });
+    } catch (err) {
+        console.error("restoreAdminUser error:", err);
+        return res.status(500).json({ success: false, message: "Failed to restore user" });
+    }
+};
+
+// DELETE /api/admin/users/:id/permanent — remove an already soft-deleted user and all their data, for good
+export const permanentlyDeleteAdminUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid user ID" });
+
+        if (id === req.user.id || id === req.user._id) {
+            return res.status(400).json({ success: false, message: "Cannot delete your own admin account" });
+        }
+
+        const targetUser = await User.findOne({ _id: id, isDeleted: true });
+        if (!targetUser) {
+            return res.status(404).json({
+                success: false,
+                message: "Deleted user not found. Delete the account first."
+            });
+        }
 
         if (targetUser.role === "admin") {
             return res.status(403).json({ success: false, message: "Cannot delete another admin account" });
@@ -408,20 +580,15 @@ export const deleteAdminUser = async (req, res) => {
             }
         }
 
-        // 8. Finally delete the user document
-        await User.findByIdAndDelete(id);
-
-        // Broadcast realtime events so deleted posts disappear from open feeds
-        for (const p of userPosts) {
-            emitToAll("post:deleted", { postId: p._id.toString() });
-        }
+        // 8. Finally delete the user document (deleteOne is not filtered, unlike findByIdAndDelete)
+        await User.deleteOne({ _id: id });
 
         return res.json({
             success: true,
-            message: `User @${targetUser.username} and all associated data deleted successfully`
+            message: `User @${targetUser.username} and all associated data permanently deleted`
         });
     } catch (err) {
-        console.error("deleteAdminUser error:", err);
+        console.error("permanentlyDeleteAdminUser error:", err);
         return res.status(500).json({ success: false, message: "Failed to delete user" });
     }
 };

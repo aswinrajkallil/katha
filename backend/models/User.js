@@ -20,9 +20,32 @@ const userSchema = new mongoose.Schema({
     location: { type: String, trim: true, maxlength: 100, default: "" },
     website: { type: String, trim: true, maxlength: 200, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
-    refreshToken: { type: String, default: null }
+    refreshToken: { type: String, default: null },
+    // Soft delete: a deleted account stays in the database so an admin can restore it.
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null }
 }, { timestamps: true });
 
+// Hide soft-deleted users from every read by default (login, refresh, profiles, populate...),
+// so no controller has to remember to filter them. To read deleted users, either filter on
+// `isDeleted` explicitly (e.g. { isDeleted: true }) or opt in with
+// `.setOptions({ withDeleted: true })`. Same pattern as the Post model.
+const FILTERED_QUERY_OPS = [
+    "find",
+    "findOne",
+    "findOneAndUpdate",
+    "findOneAndDelete",
+    "countDocuments"
+];
+
+userSchema.pre(FILTERED_QUERY_OPS, function () {
+    if (this.getOptions().withDeleted) return;
+    if (this.getFilter().isDeleted !== undefined) return;
+    this.where({ isDeleted: { $ne: true } });
+});
+
+userSchema.index({ isDeleted: 1, deletedAt: -1 });
 
 const User = mongoose.model("User", userSchema);
 export default User;
