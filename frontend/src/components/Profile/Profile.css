@@ -21,13 +21,16 @@
   background-color: var(--color-bg-primary, #ffffff);
   border: 1px solid var(--color-border, #e8eaed);
   border-radius: 16px;
-  overflow: hidden;
+  /* Must stay visible: the overflow menu (incl. Log out) drops below the avatar row
+     and would be clipped by the card edge. The cover rounds its own top corners instead. */
+  overflow: visible;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   margin-bottom: 24px;
 }
 
 .profile-cover-banner {
   position: relative;
+  border-radius: 15px 15px 0 0;
   width: 100%;
   aspect-ratio: 3 / 1;
   min-height: 180px;
@@ -231,7 +234,8 @@
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   min-width: 180px;
-  z-index: 50;
+  max-width: calc(100vw - 32px);
+  z-index: 60;
   padding: 6px;
   display: flex;
   flex-direction: column;
