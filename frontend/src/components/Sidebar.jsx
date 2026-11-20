@@ -340,7 +340,6 @@ function SidebarGroup({ id, title, collapsed, onToggle, children }) {
         aria-expanded={!collapsed}
       >
         <span>{title}</span>
-        <ChevronDown size={14} className={`sb-group-chevron ${collapsed ? "is-collapsed" : ""}`} />
       </button>
       {!collapsed && <ul className="sidebar-list">{children}</ul>}
     </section>

@@ -10,6 +10,8 @@ import {
   AlertCircle,
   RefreshCw,
   FileText,
+  Archive,
+  UserCheck,
 } from "lucide-react";
 import { apiQuery } from "../../api/api";
 import { queryKeys } from "../../api/queryClient";
@@ -33,6 +35,7 @@ export default function AdminUsers() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showDeleted, setShowDeleted] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 10;
 
@@ -46,10 +49,12 @@ export default function AdminUsers() {
   }, [searchInput]);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: queryKeys.adminUsers({ search: debouncedSearch, page, limit }),
+    queryKey: queryKeys.adminUsers({ search: debouncedSearch, page, limit, deleted: showDeleted }),
     queryFn: () =>
       apiQuery(
-        `/admin/users?search=${encodeURIComponent(debouncedSearch)}&page=${page}&limit=${limit}`
+        `/admin/users?search=${encodeURIComponent(debouncedSearch)}&page=${page}&limit=${limit}${
+          showDeleted ? "&deleted=true" : ""
+        }`
       ),
     staleTime: 30 * 1000,
   });
@@ -62,8 +67,36 @@ export default function AdminUsers() {
       <div className="admin-page-header">
         <div className="admin-header-title-wrap">
           <h1 className="admin-page-title">Users</h1>
-          <p className="admin-page-subtitle">Manage user accounts, roles, and privileges</p>
+          <p className="admin-page-subtitle">
+            {showDeleted
+              ? "Deactivated accounts. Restore them or delete them for good."
+              : "Manage user accounts, roles, and privileges"}
+          </p>
         </div>
+      </div>
+
+      {/* View toggle: Active vs Deleted */}
+      <div className="admin-posts-status-filters" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className={`admin-filter-pill ${!showDeleted ? "active" : ""}`}
+          onClick={() => {
+            setShowDeleted(false);
+            setPage(1);
+          }}
+        >
+          <UserCheck size={14} /> Active Users
+        </button>
+        <button
+          type="button"
+          className={`admin-filter-pill ${showDeleted ? "active" : ""}`}
+          onClick={() => {
+            setShowDeleted(true);
+            setPage(1);
+          }}
+        >
+          <Archive size={14} /> Deleted Users
+        </button>
       </div>
 
       {/* Filter / Search Bar */}
@@ -129,6 +162,8 @@ export default function AdminUsers() {
                   <td colSpan={5} className="admin-table-empty">
                     {debouncedSearch
                       ? `No users found matching "${debouncedSearch}".`
+                      : showDeleted
+                      ? "No deleted users."
                       : "No users registered yet."}
                   </td>
                 </tr>

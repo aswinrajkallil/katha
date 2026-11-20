@@ -13,6 +13,8 @@ import {
   FileText,
   AlertCircle,
   RefreshCw,
+  RotateCcw,
+  Archive,
 } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import apiFetch, { apiQuery } from "../../api/api";
@@ -41,8 +43,10 @@ export default function AdminPosts() {
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(""); // "" | "published" | "draft"
+  const [showDeleted, setShowDeleted] = useState(false);
   const [page, setPage] = useState(1);
   const [postToDelete, setPostToDelete] = useState(null);
+  const [postToPurge, setPostToPurge] = useState(null);
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -58,6 +62,7 @@ export default function AdminPosts() {
     page,
     status: statusFilter,
     search: debouncedSearch,
+    deleted: showDeleted,
   });
 
   const {
@@ -75,6 +80,7 @@ export default function AdminPosts() {
       });
       if (statusFilter) params.set("status", statusFilter);
       if (debouncedSearch) params.set("search", debouncedSearch);
+      if (showDeleted) params.set("deleted", "true");
       return apiQuery(`/admin/posts?${params.toString()}`);
     },
     staleTime: 30 * 1000,
@@ -122,13 +128,45 @@ export default function AdminPosts() {
       toast.error(err.message || "Could not delete post");
     },
     onSuccess: () => {
-      toast.success("Post deleted successfully");
+      toast.success("Post moved to Deleted Posts");
     },
     onSettled: () => {
       // Invalidate relevant queries to keep counts and feeds in sync
       queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
     },
+  });
+
+  // Restore a soft-deleted post
+  const restoreMutation = useMutation({
+    mutationFn: async (postId) => {
+      const res = await apiFetch(`/admin/posts/${postId}/restore`, { method: "PATCH" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to restore post");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || "Post restored");
+      queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
+    },
+    onError: (err) => toast.error(err.message || "Could not restore post"),
+  });
+
+  // Permanently delete a post that is already in the Deleted Posts view
+  const purgeMutation = useMutation({
+    mutationFn: async (postId) => {
+      const res = await apiFetch(`/admin/posts/${postId}/permanent`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete post");
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Post permanently deleted");
+      queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
+    },
+    onError: (err) => toast.error(err.message || "Could not delete post"),
   });
 
   const handleDeleteConfirm = () => {
@@ -138,6 +176,13 @@ export default function AdminPosts() {
     deleteMutation.mutate(id);
   };
 
+  const handlePurgeConfirm = () => {
+    if (!postToPurge) return;
+    const id = postToPurge._id;
+    setPostToPurge(null);
+    purgeMutation.mutate(id);
+  };
+
   return (
     <div className="admin-page-container">
       {/* Header */}
@@ -145,9 +190,36 @@ export default function AdminPosts() {
         <div>
           <h1 className="admin-page-title">Posts Moderation</h1>
           <p className="admin-page-subtitle">
-            Search, inspect, and remove posts across the platform
+            {showDeleted
+              ? "Posts removed from the platform. Restore them or delete them for good."
+              : "Search, inspect, and remove posts across the platform"}
           </p>
         </div>
+      </div>
+
+      {/* View toggle: Active vs Deleted */}
+      <div className="admin-posts-status-filters" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className={`admin-filter-pill ${!showDeleted ? "active" : ""}`}
+          onClick={() => {
+            setShowDeleted(false);
+            setPage(1);
+          }}
+        >
+          <FileText size={14} /> Active Posts
+        </button>
+        <button
+          type="button"
+          className={`admin-filter-pill ${showDeleted ? "active" : ""}`}
+          onClick={() => {
+            setShowDeleted(true);
+            setStatusFilter("");
+            setPage(1);
+          }}
+        >
+          <Archive size={14} /> Deleted Posts
+        </button>
       </div>
 
       {/* Toolbar: Search + Status Filter */}
@@ -172,38 +244,40 @@ export default function AdminPosts() {
           )}
         </div>
 
-        <div className="admin-posts-status-filters">
-          <button
-            type="button"
-            className={`admin-filter-pill ${statusFilter === "" ? "active" : ""}`}
-            onClick={() => {
-              setStatusFilter("");
-              setPage(1);
-            }}
-          >
-            All Statuses
-          </button>
-          <button
-            type="button"
-            className={`admin-filter-pill ${statusFilter === "published" ? "active" : ""}`}
-            onClick={() => {
-              setStatusFilter("published");
-              setPage(1);
-            }}
-          >
-            Published
-          </button>
-          <button
-            type="button"
-            className={`admin-filter-pill ${statusFilter === "draft" ? "active" : ""}`}
-            onClick={() => {
-              setStatusFilter("draft");
-              setPage(1);
-            }}
-          >
-            Drafts
-          </button>
-        </div>
+        {!showDeleted && (
+          <div className="admin-posts-status-filters">
+            <button
+              type="button"
+              className={`admin-filter-pill ${statusFilter === "" ? "active" : ""}`}
+              onClick={() => {
+                setStatusFilter("");
+                setPage(1);
+              }}
+            >
+              All Statuses
+            </button>
+            <button
+              type="button"
+              className={`admin-filter-pill ${statusFilter === "published" ? "active" : ""}`}
+              onClick={() => {
+                setStatusFilter("published");
+                setPage(1);
+              }}
+            >
+              Published
+            </button>
+            <button
+              type="button"
+              className={`admin-filter-pill ${statusFilter === "draft" ? "active" : ""}`}
+              onClick={() => {
+                setStatusFilter("draft");
+                setPage(1);
+              }}
+            >
+              Drafts
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Error State */}
@@ -250,7 +324,11 @@ export default function AdminPosts() {
                   <tr>
                     <td colSpan={8} className="admin-table-empty">
                       <FileText size={32} color="#94a3b8" style={{ margin: "0 auto 8px" }} />
-                      <p>No posts found matching the filter.</p>
+                      <p>
+                        {showDeleted
+                          ? "No deleted posts."
+                          : "No posts found matching the filter."}
+                      </p>
                     </td>
                   </tr>
                 ) : (
@@ -320,15 +398,39 @@ export default function AdminPosts() {
                             <ExternalLink size={15} />
                             <span>View</span>
                           </Link>
-                          <button
-                            type="button"
-                            className="admin-post-action-btn delete"
-                            onClick={() => setPostToDelete(post)}
-                            title="Delete post"
-                          >
-                            <Trash2 size={15} />
-                            <span>Delete</span>
-                          </button>
+                          {showDeleted ? (
+                            <>
+                              <button
+                                type="button"
+                                className="admin-post-action-btn"
+                                onClick={() => restoreMutation.mutate(post._id)}
+                                disabled={restoreMutation.isPending}
+                                title="Restore post"
+                              >
+                                <RotateCcw size={15} />
+                                <span>Restore</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-post-action-btn delete"
+                                onClick={() => setPostToPurge(post)}
+                                title="Delete permanently"
+                              >
+                                <Trash2 size={15} />
+                                <span>Delete Forever</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="admin-post-action-btn delete"
+                              onClick={() => setPostToDelete(post)}
+                              title="Delete post"
+                            >
+                              <Trash2 size={15} />
+                              <span>Delete</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -371,15 +473,26 @@ export default function AdminPosts() {
         </div>
       )}
 
-      {/* Delete Post Confirm Dialog */}
+      {/* Delete Post Confirm Dialog (soft delete) */}
       <ConfirmDialog
         isOpen={Boolean(postToDelete)}
         title="Delete this post?"
-        message={`Are you sure you want to delete "${postToDelete?.title}"? All associated comments and images will be permanently removed.`}
+        message={`"${postToDelete?.title}" will be hidden from the site and moved to Deleted Posts. You can restore it later.`}
         confirmText="Delete Post"
         loading={deleteMutation.isPending}
         onConfirm={handleDeleteConfirm}
         onClose={() => setPostToDelete(null)}
+      />
+
+      {/* Permanent Delete Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(postToPurge)}
+        title="Delete this post forever?"
+        message={`"${postToPurge?.title}" and all of its comments, likes, and images will be permanently removed. This cannot be undone.`}
+        confirmText="Delete Forever"
+        loading={purgeMutation.isPending}
+        onConfirm={handlePurgeConfirm}
+        onClose={() => setPostToPurge(null)}
       />
     </div>
   );

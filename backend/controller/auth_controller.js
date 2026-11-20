@@ -25,7 +25,8 @@ const checkUsername = async (req, res) => {
         if (!/^[a-z0-9_.]{3,30}$/.test(username)) {
             return res.status(400).json({ success: false, available: false, message: "Username must be 3–30 characters using letters, numbers, underscores or dots" });
         }
-        const exists = await User.findOne({ username }).select("_id");
+        // Soft-deleted accounts still own their username, so they count as taken
+        const exists = await User.findOne({ username }).setOptions({ withDeleted: true }).select("_id");
         return res.json({ success: true, available: !exists });
     } catch (error) {
         return res.status(500).json({ success: false, message: "Check failed" });
@@ -40,7 +41,7 @@ const register = async (req, res) => {
         if (!/^[a-z0-9_.]{3,30}$/.test(username)) return res.status(400).json({ success: false, message: "Username must be 3–30 characters using letters, numbers, underscores or dots" });
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: "Enter a valid email address" });
         if (typeof password !== "string" || password.length < 8 || password.length > 128) return res.status(400).json({ success: false, message: "Password must be between 8 and 128 characters" });
-        const exists = await User.findOne({ $or: [{ email }, { username }] }).select("_id");
+        const exists = await User.findOne({ $or: [{ email }, { username }] }).setOptions({ withDeleted: true }).select("_id");
         if (exists) return res.status(409).json({ success: false, message: "Email or username is already registered" });
         const user = await User.create({ username, email, password: await bcrypt.hash(password, 12) });
         return res.status(201).json({ success: true, message: "User registered successfully", data: { id: user._id, _id: user._id, username: user.username, email: user.email, role: user.role } });
@@ -56,8 +57,10 @@ const login = async (req, res) => {
         const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
         const password = req.body.password;
         if (!email || typeof password !== "string") return res.status(400).json({ success: false, message: "Email and password are required" });
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).setOptions({ withDeleted: true });
         if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ success: false, message: "Invalid email or password" });
+        // Only revealed after the password is correct, so it does not leak which emails exist
+        if (user.isDeleted) return res.status(403).json({ success: false, message: "This account has been deactivated" });
         const refreshToken = generateRefreshToken(user);
         const accessToken = generateToken(user);
         user.refreshToken = hashToken(refreshToken);

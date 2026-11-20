@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   RefreshCw,
   AlertCircle,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -52,11 +53,20 @@ export default function AdminUserDetail() {
   const [statusFilter, setStatusFilter] = useState("");
   const [postToDelete, setPostToDelete] = useState(null);
   const [deletingPost, setDeletingPost] = useState(false);
+  const [restoringPostId, setRestoringPostId] = useState(null);
+  const [postToPurge, setPostToPurge] = useState(null);
+  const [purgingPost, setPurgingPost] = useState(false);
 
   // User delete modal state
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [confirmUsernameInput, setConfirmUsernameInput] = useState("");
   const [deletingUser, setDeletingUser] = useState(false);
+  const [restoringUser, setRestoringUser] = useState(false);
+
+  // Permanent delete modal state (only reachable once the account is already soft-deleted)
+  const [showPurgeUserModal, setShowPurgeUserModal] = useState(false);
+  const [confirmPurgeInput, setConfirmPurgeInput] = useState("");
+  const [purgingUser, setPurgingUser] = useState(false);
 
   // 1. Fetch user detail & counts
   const {
@@ -101,7 +111,7 @@ export default function AdminUserDetail() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete post");
 
-      toast.success("Post deleted successfully");
+      toast.success("Post moved to Deleted Posts");
       setPostToDelete(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.adminUserPosts(id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.adminUser(id) });
@@ -114,7 +124,49 @@ export default function AdminUserDetail() {
     }
   };
 
-  // Full user account deletion with typed username confirmation
+  // Restore a soft-deleted post belonging to this user
+  const handleRestorePost = async (post) => {
+    setRestoringPostId(post._id);
+    try {
+      const res = await apiFetch(`/admin/posts/${post._id}/restore`, { method: "PATCH" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to restore post");
+
+      toast.success("Post restored");
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUserPosts(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUser(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminPosts() });
+    } catch (err) {
+      toast.error(err.message || "Could not restore post");
+    } finally {
+      setRestoringPostId(null);
+    }
+  };
+
+  // Permanently delete a post that is already soft-deleted
+  const handlePurgePost = async () => {
+    if (!postToPurge) return;
+    setPurgingPost(true);
+    try {
+      const res = await apiFetch(`/admin/posts/${postToPurge._id}/permanent`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete post");
+
+      toast.success("Post permanently deleted");
+      setPostToPurge(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUserPosts(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUser(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminPosts() });
+    } catch (err) {
+      toast.error(err.message || "Could not delete post");
+    } finally {
+      setPurgingPost(false);
+    }
+  };
+
+  // Soft delete (deactivate) the user account, with typed username confirmation
   const handleDeleteUser = async () => {
     if (!targetUser || confirmUsernameInput !== targetUser.username) return;
     setDeletingUser(true);
@@ -123,15 +175,57 @@ export default function AdminUserDetail() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete user");
 
-      toast.success(`User @${targetUser.username} deleted`);
+      toast.success(data.message || `User @${targetUser.username} deleted`);
       setShowDeleteUserModal(false);
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUser(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
+    } catch (err) {
+      toast.error(err.message || "Could not delete user");
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
+  // Restore a soft-deleted account
+  const handleRestoreUser = async () => {
+    if (!targetUser) return;
+    setRestoringUser(true);
+    try {
+      const res = await apiFetch(`/admin/users/${targetUser._id}/restore`, { method: "PATCH" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to restore user");
+
+      toast.success(data.message || `User @${targetUser.username} restored`);
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUser(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUserPosts(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
+    } catch (err) {
+      toast.error(err.message || "Could not restore user");
+    } finally {
+      setRestoringUser(false);
+    }
+  };
+
+  // Permanently delete an already soft-deleted account and all of its data
+  const handlePurgeUser = async () => {
+    if (!targetUser || confirmPurgeInput !== targetUser.username) return;
+    setPurgingUser(true);
+    try {
+      const res = await apiFetch(`/admin/users/${targetUser._id}/permanent`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete user");
+
+      toast.success(`User @${targetUser.username} permanently deleted`);
+      setShowPurgeUserModal(false);
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
       navigate("/admin/users", { replace: true });
     } catch (err) {
       toast.error(err.message || "Could not delete user");
     } finally {
-      setDeletingUser(false);
+      setPurgingUser(false);
     }
   };
 
@@ -176,6 +270,29 @@ export default function AdminUserDetail() {
           <span>Back to Users</span>
         </Link>
       </div>
+
+      {/* Deleted account banner */}
+      {targetUser.isDeleted && (
+        <div className="admin-error-box" style={{ borderColor: "#f59e0b", background: "#fffbeb" }}>
+          <AlertTriangle size={28} color="#d97706" />
+          <div className="admin-error-content">
+            <h3>This account is deleted</h3>
+            <p>
+              @{targetUser.username} was deactivated
+              {targetUser.deletedAt ? ` on ${formatDate(targetUser.deletedAt)}` : ""}. Their posts
+              are hidden. Restore the account to bring it and its posts back.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="admin-btn-secondary"
+            onClick={handleRestoreUser}
+            disabled={restoringUser}
+          >
+            <RotateCcw size={14} /> {restoringUser ? "Restoring..." : "Restore Account"}
+          </button>
+        </div>
+      )}
 
       {/* User Header Profile Card */}
       <section className="admin-user-header-card" aria-label="User profile overview">
@@ -324,7 +441,7 @@ export default function AdminUserDetail() {
                       </td>
                       <td>
                         <span className={`admin-status-badge ${post.status}`}>
-                          {post.status}
+                          {post.isDeleted ? "deleted" : post.status}
                         </span>
                       </td>
                       <td>
@@ -358,15 +475,39 @@ export default function AdminUserDetail() {
                             <ExternalLink size={15} />
                             <span>View</span>
                           </Link>
-                          <button
-                            type="button"
-                            className="admin-post-action-btn delete"
-                            onClick={() => setPostToDelete(post)}
-                            title="Delete post"
-                          >
-                            <Trash2 size={15} />
-                            <span>Delete</span>
-                          </button>
+                          {post.isDeleted ? (
+                            <>
+                              <button
+                                type="button"
+                                className="admin-post-action-btn"
+                                onClick={() => handleRestorePost(post)}
+                                disabled={restoringPostId === post._id}
+                                title="Restore post"
+                              >
+                                <RotateCcw size={15} />
+                                <span>Restore</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-post-action-btn delete"
+                                onClick={() => setPostToPurge(post)}
+                                title="Delete permanently"
+                              >
+                                <Trash2 size={15} />
+                                <span>Delete Forever</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="admin-post-action-btn delete"
+                              onClick={() => setPostToDelete(post)}
+                              title="Delete post"
+                            >
+                              <Trash2 size={15} />
+                              <span>Delete</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -416,10 +557,13 @@ export default function AdminUserDetail() {
             <AlertTriangle size={24} color="#dc2626" />
           </div>
           <div>
-            <h3 className="admin-danger-title">Danger Zone: Delete User Account</h3>
+            <h3 className="admin-danger-title">
+              Danger Zone: {targetUser.isDeleted ? "Permanently Delete Account" : "Delete User Account"}
+            </h3>
             <p className="admin-danger-desc">
-              Permanently remove @{targetUser.username} and all of their posts, images, comments,
-              likes, bookmarks, and follows. This action cannot be reversed.
+              {targetUser.isDeleted
+                ? `@${targetUser.username} is already deactivated. This will permanently remove the account and all of its posts, images, comments, likes, bookmarks, and follows. This cannot be reversed.`
+                : `Deactivate @${targetUser.username}'s account and hide their posts. The account and posts stay in the database and can be restored later from the Deleted Users view.`}
             </p>
           </div>
         </div>
@@ -435,30 +579,56 @@ export default function AdminUserDetail() {
             </span>
           ) : null}
 
-          <button
-            type="button"
-            className="admin-danger-delete-btn"
-            disabled={!canDeleteUser}
-            onClick={() => {
-              setConfirmUsernameInput("");
-              setShowDeleteUserModal(true);
-            }}
-          >
-            <Trash2 size={16} />
-            <span>Delete User Account</span>
-          </button>
+          {targetUser.isDeleted ? (
+            <button
+              type="button"
+              className="admin-danger-delete-btn"
+              disabled={!canDeleteUser}
+              onClick={() => {
+                setConfirmPurgeInput("");
+                setShowPurgeUserModal(true);
+              }}
+            >
+              <Trash2 size={16} />
+              <span>Permanently Delete Account</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="admin-danger-delete-btn"
+              disabled={!canDeleteUser}
+              onClick={() => {
+                setConfirmUsernameInput("");
+                setShowDeleteUserModal(true);
+              }}
+            >
+              <Trash2 size={16} />
+              <span>Delete User Account</span>
+            </button>
+          )}
         </div>
       </section>
 
-      {/* Delete Post Confirm Dialog */}
+      {/* Delete Post Confirm Dialog (soft delete) */}
       <ConfirmDialog
         isOpen={Boolean(postToDelete)}
         title="Delete this post?"
-        message={`Are you sure you want to delete "${postToDelete?.title}"? All associated comments and images will be permanently removed.`}
+        message={`"${postToDelete?.title}" will be hidden from the site and moved to Deleted Posts. You can restore it later.`}
         confirmText="Delete Post"
         loading={deletingPost}
         onConfirm={handleDeletePost}
         onClose={() => setPostToDelete(null)}
+      />
+
+      {/* Permanently Delete Post Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(postToPurge)}
+        title="Delete this post forever?"
+        message={`"${postToPurge?.title}" and all of its comments, likes, and images will be permanently removed. This cannot be undone.`}
+        confirmText="Delete Forever"
+        loading={purgingPost}
+        onConfirm={handlePurgePost}
+        onClose={() => setPostToPurge(null)}
       />
 
       {/* Delete User Typed Confirmation Modal */}
@@ -490,9 +660,9 @@ export default function AdminUserDetail() {
 
             <div className="admin-modal-body">
               <p className="admin-modal-warning-text">
-                This will delete user <strong>@{targetUser.username}</strong>, along with{" "}
-                <strong>{counts.posts} posts</strong>, all their comments, media assets from Cloudinary,
-                and notifications.
+                This will deactivate <strong>@{targetUser.username}</strong> and hide{" "}
+                <strong>{counts.posts} posts</strong>. The account, posts, and comments stay in the
+                database and can be restored later from the Deleted Users view.
               </p>
               <p className="admin-modal-instruction">
                 Please type <strong style={{ color: "#dc2626" }}>{targetUser.username}</strong> below to confirm:
@@ -523,7 +693,76 @@ export default function AdminUserDetail() {
                 disabled={confirmUsernameInput !== targetUser.username || deletingUser}
                 onClick={handleDeleteUser}
               >
-                {deletingUser ? "Deleting user..." : "Permanently Delete User"}
+                {deletingUser ? "Deleting user..." : "Delete User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent User Deletion Modal (only reachable once already soft-deleted) */}
+      {showPurgeUserModal && (
+        <div className="admin-modal-backdrop" onClick={() => setShowPurgeUserModal(false)}>
+          <div
+            className="admin-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="purge-user-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="admin-modal-header">
+              <div className="admin-modal-icon-danger">
+                <AlertTriangle size={24} color="#dc2626" />
+              </div>
+              <h2 id="purge-user-modal-title" className="admin-modal-title">
+                Confirm Permanent Deletion
+              </h2>
+              <button
+                type="button"
+                className="admin-modal-close-btn"
+                onClick={() => setShowPurgeUserModal(false)}
+                aria-label="Close dialog"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="admin-modal-body">
+              <p className="admin-modal-warning-text">
+                This will permanently delete <strong>@{targetUser.username}</strong>, along with{" "}
+                <strong>{counts.posts} posts</strong>, all their comments, media assets from
+                Cloudinary, and notifications. This cannot be undone.
+              </p>
+              <p className="admin-modal-instruction">
+                Please type <strong style={{ color: "#dc2626" }}>{targetUser.username}</strong> below to confirm:
+              </p>
+
+              <input
+                type="text"
+                value={confirmPurgeInput}
+                onChange={(e) => setConfirmPurgeInput(e.target.value)}
+                placeholder={targetUser.username}
+                className="admin-modal-confirm-input"
+                autoFocus
+              />
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                type="button"
+                className="admin-modal-cancel-btn"
+                onClick={() => setShowPurgeUserModal(false)}
+                disabled={purgingUser}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-modal-destructive-btn"
+                disabled={confirmPurgeInput !== targetUser.username || purgingUser}
+                onClick={handlePurgeUser}
+              >
+                {purgingUser ? "Deleting user..." : "Permanently Delete User"}
               </button>
             </div>
           </div>
