@@ -222,3 +222,8 @@
     transform: rotate(360deg);
   }
 }
+
+/* Optional extra content (e.g. a reason field) between the message and the buttons */
+.confirm-dialog-extra {
+  padding: 0 24px 4px;
+}

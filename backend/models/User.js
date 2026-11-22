@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ROLE_VALUES } from "../utils/permissions.js";
 
 const userSchema = new mongoose.Schema({
     username: {
@@ -19,7 +20,12 @@ const userSchema = new mongoose.Schema({
     bio: { type: String, trim: true, maxlength: 300, default: "" },
     location: { type: String, trim: true, maxlength: 100, default: "" },
     website: { type: String, trim: true, maxlength: 200, default: "" },
-    role: { type: String, enum: ["user", "admin"], default: "user" },
+    // Never settable through registration or profile updates. Changed only by the Super Admin
+    // role endpoint or the server-side provisioning script.
+    role: { type: String, enum: ROLE_VALUES, default: "user" },
+    roleChangedAt: { type: Date, default: null },
+    roleChangedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    lastActiveAt: { type: Date, default: null },
     refreshToken: { type: String, default: null },
     // Soft delete: a deleted account stays in the database so an admin can restore it.
     isDeleted: { type: Boolean, default: false },
@@ -46,6 +52,8 @@ userSchema.pre(FILTERED_QUERY_OPS, function () {
 });
 
 userSchema.index({ isDeleted: 1, deletedAt: -1 });
+userSchema.index({ role: 1, isDeleted: 1 });
+userSchema.index({ createdAt: -1 });
 
 const User = mongoose.model("User", userSchema);
 export default User;

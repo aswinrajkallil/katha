@@ -3,6 +3,10 @@ import Post from "../models/Post.js";
 import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
 import { emitToRoom } from "../socket.js";
+import { isAdminRole, isStaffRole } from "../utils/permissions.js";
+import { recordAudit, AUDIT_ACTIONS } from "../services/auditService.js";
+import { removeComment } from "../services/moderationService.js";
+import { HttpError } from "../utils/httpError.js";
 
 const isValidId = id => mongoose.Types.ObjectId.isValid(id);
 
@@ -103,8 +107,12 @@ const getComments = async (req, res) => {
 
         const currentUserId = req.user?.id ? req.user.id.toString() : null;
 
+        // Moderation metadata (who removed it and why) is staff-only
+        const stripModeration = ({ deletedBy, deletedAt, moderationReason, ...rest }) => rest;
+
         // Format comments
-        const formatted = comments.map(comment => {
+        const formatted = comments.map(raw => {
+            const comment = stripModeration(raw);
             const likesArr = Array.isArray(comment.likes) ? comment.likes : [];
             const likesCount = likesArr.length;
             const likedByMe = currentUserId ? likesArr.some(id => id.toString() === currentUserId) : false;
@@ -180,13 +188,25 @@ const updateComment = async (req, res) => {
             return res.status(400).json({ success: false, message: "Cannot edit a deleted comment" });
         }
 
-        if (comment.author.toString() !== req.user.id && req.user.role !== "admin") {
+        const isAuthor = comment.author.toString() === req.user.id;
+        if (!isAuthor && !isAdminRole(req.user.role)) {
             return res.status(403).json({ success: false, message: "Not authorized" });
         }
 
+        const previousContent = comment.content;
         comment.content = content.trim();
         comment.isEdited = true;
         await comment.save();
+        if (!isAuthor) {
+            // An administrator changed someone else's words: keep the original on record
+            await recordAudit(req.actor, {
+                action: AUDIT_ACTIONS.COMMENT_EDIT,
+                targetType: "comment",
+                targetId: comment._id,
+                targetLabel: previousContent.slice(0, 120),
+                metadata: { postId: comment.post, authorId: comment.author, before: previousContent, after: comment.content }
+            });
+        }
         await comment.populate("author", "username fullName profileImage");
 
         const likesArr = Array.isArray(comment.likes) ? comment.likes : [];
@@ -223,8 +243,15 @@ const deleteComment = async (req, res) => {
         const comment = await Comment.findById(id);
         if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
 
-        if (comment.author.toString() !== req.user.id && req.user.role !== "admin") {
-            return res.status(403).json({ success: false, message: "Not authorized" });
+        const isAuthor = comment.author.toString() === req.user.id;
+        if (!isAuthor) {
+            // Someone else's comment: only staff, and only through the audited moderation path
+            // (moderators must give a reason, and can only act on normal users' comments).
+            if (!isStaffRole(req.user.role)) {
+                return res.status(403).json({ success: false, message: "Not authorized" });
+            }
+            await removeComment(req.actor, id, { reason: req.body?.reason });
+            return res.json({ success: true, message: "Comment removed", softDeleted: true, commentId: id });
         }
 
         const targetPostId = comment.post.toString();
@@ -235,11 +262,15 @@ const deleteComment = async (req, res) => {
             // Soft delete: keep structure for child replies as Reddit does
             comment.isDeleted = true;
             comment.content = "[deleted]";
+            comment.deletedAt = new Date();
+            comment.deletedBy = comment.author;
             await comment.save();
         } else {
             // Hard delete
             await Comment.findByIdAndDelete(id);
         }
+        // Notifications that point at this comment would link to nothing
+        await Notification.deleteMany({ comment: id });
 
         const commentsCount = await Comment.countDocuments({ post: targetPostId, isDeleted: false });
         emitToRoom(`post:${targetPostId}`, "comment:deleted", {
@@ -257,6 +288,9 @@ const deleteComment = async (req, res) => {
             commentId: id
         });
     } catch (error) {
+        if (error instanceof HttpError) {
+            return res.status(error.status).json({ success: false, message: error.message });
+        }
         console.error("deleteComment:", error);
         return res.status(500).json({ success: false, message: "Unable to delete comment" });
     }

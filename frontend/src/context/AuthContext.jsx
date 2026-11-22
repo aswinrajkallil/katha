@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import apiFetch from "../api/api";
 
 const AuthContext = createContext(null);
@@ -67,8 +67,36 @@ export const AuthProvider = ({ children }) => {
         setUser((prev) => normalizeUser({ ...prev, ...updatedData }));
     };
 
+    // Re-read the account from the server. Roles are enforced by the API on every request;
+    // this keeps the UI in step when a role is changed or revoked while a session is open.
+    const refreshUser = useCallback(async () => {
+        if (!localStorage.getItem("accessToken")) return;
+        try {
+            const res = await apiFetch("/me");
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.success) setUser(normalizeUser(data.data));
+        } catch {
+            // Offline or expired: keep the current state.
+        }
+    }, []);
+
+    const role = user?.role;
+    useEffect(() => {
+        if (!role || role === "user") return undefined;
+        const onVisible = () => {
+            if (document.visibilityState === "visible") refreshUser();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        window.addEventListener("focus", onVisible);
+        return () => {
+            document.removeEventListener("visibilitychange", onVisible);
+            window.removeEventListener("focus", onVisible);
+        };
+    }, [role, refreshUser]);
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, updateUser, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

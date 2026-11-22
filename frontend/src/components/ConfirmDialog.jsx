@@ -14,6 +14,8 @@ export default function ConfirmDialog({
   loading = false,
   danger = true,
   actions = null,
+  children = null,
+  confirmDisabled = false,
 }) {
   const dialogRef = useRef(null);
   const confirmBtnRef = useRef(null);
@@ -104,6 +106,8 @@ export default function ConfirmDialog({
           </div>
         </div>
 
+        {children && <div className="confirm-dialog-extra">{children}</div>}
+
         {actions && Array.isArray(actions) && actions.length > 0 ? (
           <div className="confirm-dialog-actions confirm-dialog-actions-multi">
             {actions.map((act, idx) => (
@@ -139,7 +143,7 @@ export default function ConfirmDialog({
               type="button"
               className={`confirm-btn-action ${danger ? "confirm-btn-danger" : "confirm-btn-primary"}`}
               onClick={onConfirm}
-              disabled={loading}
+              disabled={loading || confirmDisabled}
             >
               {loading ? (
                 <span className="confirm-btn-spinner" />

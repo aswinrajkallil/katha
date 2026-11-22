@@ -10,6 +10,7 @@ import {
   CornerDownRight,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import ReportButton from "../ReportButton";
 import { useToast } from "../../context/ToastContext";
 import apiFetch from "../../api/api";
 import UserAvatar from "../UserAvatar";
@@ -100,7 +101,7 @@ function CommentItem({
   const authorId = comment.author?._id || comment.author?.id;
   const currentUserId = user?._id || user?.id;
   const isOwner = Boolean(user && authorId && currentUserId && authorId.toString() === currentUserId.toString());
-  const isAdmin = Boolean(user && user.role === "admin");
+  const isAdmin = Boolean(user && (user.role === "admin" || user.role === "superadmin"));
   const canManage = (isOwner || isAdmin) && !comment.isDeleted;
   const isPostAuthor = Boolean(
     postAuthorId && authorId && postAuthorId.toString() === authorId.toString()
@@ -390,6 +391,10 @@ function CommentItem({
                 <Share2 size={15} />
                 <span>Share</span>
               </button>
+
+              {!comment.isDeleted && (
+                <ReportButton targetType="comment" targetId={comment._id} ownerId={authorId} className="reddit-action-btn" />
+              )}
 
               {/* More Menu (Edit/Delete) */}
               {canManage && (

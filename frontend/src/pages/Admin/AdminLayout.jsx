@@ -4,6 +4,14 @@ import {
   LayoutDashboard,
   Users,
   FileText,
+  MessageSquare,
+  Flag,
+  Tags,
+  Star,
+  BarChart3,
+  ShieldCheck,
+  ScrollText,
+  Settings,
   ExternalLink,
   LogOut,
   Shield,
@@ -12,10 +20,26 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import { useAdminAccess, ROLE_LABELS } from "./adminAccess";
 import "./AdminLayout.css";
+
+const NAV_ITEMS = [
+  { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" },
+  { to: "/admin/users", label: "Users", icon: Users, permission: "users:view" },
+  { to: "/admin/posts", label: "Posts", icon: FileText, permission: "posts:view" },
+  { to: "/admin/comments", label: "Comments", icon: MessageSquare, permission: "comments:view" },
+  { to: "/admin/reports", label: "Reports", icon: Flag, permission: "reports:view" },
+  { to: "/admin/categories", label: "Categories", icon: Tags, permission: "categories:manage" },
+  { to: "/admin/featured", label: "Featured Posts", icon: Star, permission: "featured:manage" },
+  { to: "/admin/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
+  { to: "/admin/management", label: "Admin Management", icon: ShieldCheck, permission: "roles:manage" },
+  { to: "/admin/activity", label: "Activity Logs", icon: ScrollText, permission: "audit:view" },
+  { to: "/admin/settings", label: "Settings", icon: Settings, permission: "settings:manage" },
+];
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
+  const { can, role } = useAdminAccess();
   const navigate = useNavigate();
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -33,7 +57,7 @@ export default function AdminLayout() {
         <div className="admin-brand">
           <Shield size={20} color="#e8590c" />
           <span className="admin-brand-name">Kathā</span>
-          <span className="admin-badge">ADMIN</span>
+          <span className="admin-badge">{role === "moderator" ? "MOD" : "ADMIN"}</span>
         </div>
         <button
           type="button"
@@ -51,7 +75,7 @@ export default function AdminLayout() {
           <div className="admin-brand">
             <Shield size={24} color="#e8590c" />
             <span className="admin-brand-name">Kathā</span>
-            <span className="admin-badge">ADMIN</span>
+            <span className="admin-badge">{role === "moderator" ? "MOD" : "ADMIN"}</span>
           </div>
         </div>
 
@@ -61,36 +85,23 @@ export default function AdminLayout() {
           </div>
           <div className="admin-user-info">
             <span className="admin-user-name">{user?.fullName || user?.username}</span>
-            <span className="admin-user-role">Administrator</span>
+            <span className="admin-user-role">{ROLE_LABELS[role] || "Staff"}</span>
           </div>
         </div>
 
         <nav className="admin-nav" onClick={() => setMobileNavOpen(false)}>
           <div className="admin-nav-section-label">MANAGEMENT</div>
-          <NavLink
-            to="/admin"
-            end
-            className={({ isActive }) => `admin-nav-link ${isActive ? "active" : ""}`}
-          >
-            <LayoutDashboard size={18} />
-            <span>Dashboard</span>
-          </NavLink>
-
-          <NavLink
-            to="/admin/users"
-            className={({ isActive }) => `admin-nav-link ${isActive ? "active" : ""}`}
-          >
-            <Users size={18} />
-            <span>Users</span>
-          </NavLink>
-
-          <NavLink
-            to="/admin/posts"
-            className={({ isActive }) => `admin-nav-link ${isActive ? "active" : ""}`}
-          >
-            <FileText size={18} />
-            <span>Posts</span>
-          </NavLink>
+          {NAV_ITEMS.filter((item) => can(item.permission)).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => `admin-nav-link ${isActive ? "active" : ""}`}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
         </nav>
 
         <div className="admin-sidebar-footer">

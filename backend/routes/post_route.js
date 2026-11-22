@@ -13,6 +13,7 @@ import {
     restorePost,
     permanentlyDeletePost
 } from "../controller/post_controller.js";
+import { getFeaturedPosts } from "../controller/featured_controller.js";
 import authenticate, { optionalAuth } from "../middleware/authMiddleware.js";
 import upload from "../middleware/upload.js";
 import validateImage from "../middleware/validateImage.js";
@@ -22,6 +23,7 @@ const router = express.Router();
 // Specific routes MUST come before parameterized /:id routes
 router.get("/my", authenticate, getMyPosts);
 router.get("/deleted", authenticate, getDeletedPosts);
+router.get("/featured", getFeaturedPosts);
 router.get("/sidebar", optionalAuth, getSidebarPosts);
 router.get("/slug/:slug", optionalAuth, getPostBySlug);
 router.get("/user/:userId", getUserPosts);

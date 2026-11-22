@@ -1,48 +1,11 @@
-import dotenv from "dotenv";
-import mongoose from "mongoose";
-import connectDB from "../db/connectDB.js";
-import User from "../models/User.js";
-
-dotenv.config();
-
-const emailArg = process.argv[2];
-
-if (!emailArg) {
-    console.error("Error: Email argument is required.");
-    console.error("Usage: node backend/scripts/createAdmin.js <email>");
-    process.exit(1);
-}
-
-const promoteUser = async () => {
-    try {
-        await connectDB();
-        const email = emailArg.trim().toLowerCase();
-        const user = await User.findOne({ email });
-
-        if (!user) {
-            console.error(`User with email "${email}" not found.`);
-            await mongoose.disconnect();
-            process.exit(1);
-        }
-
-        if (user.role === "admin") {
-            console.log(`User ${email} (@${user.username}) is already an admin.`);
-            await mongoose.disconnect();
-            process.exit(0);
-        }
-
-        user.role = "admin";
-        await user.save();
-        console.log(`Successfully promoted ${email} (@${user.username}) to admin.`);
-        await mongoose.disconnect();
-        process.exit(0);
-    } catch (err) {
-        console.error("Failed to promote user to admin:", err.message);
-        try {
-            await mongoose.disconnect();
-        } catch (_) {}
-        process.exit(1);
-    }
-};
-
-promoteUser();
+// Retired. This script used to promote any account to "admin" by writing straight to the database,
+// which bypasses the audit log and the Super Admin hierarchy.
+//
+// - First-time setup:   node scripts/provisionSuperAdmin.js --email <email> --apply
+// - After that:         a Super Admin promotes admins and moderators from Admin > Management.
+console.error(
+    "scripts/createAdmin.js has been retired.\n" +
+        "Provision the first Super Admin with: node scripts/provisionSuperAdmin.js --email <email> --apply\n" +
+        "Then manage admins from the Admin Management page (Super Admin only). See docs/ADMIN_RBAC.md."
+);
+process.exit(1);

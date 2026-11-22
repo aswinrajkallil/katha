@@ -23,14 +23,15 @@ const categorySchema = new mongoose.Schema(
 );
 
 // Auto-generate slug from name before saving
-categorySchema.pre("save", function (next) {
+// (No `next` callback: Mongoose 9 no longer passes one to synchronous hooks, so calling it threw
+// "next is not a function" and made every category create/update fail.)
+categorySchema.pre("save", function () {
     if (this.isModified("name") || this.isNew) {
         this.slug = this.name
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/^-+|-+$/g, "");
     }
-    next();
 });
 
 const Category = mongoose.model("Category", categorySchema);

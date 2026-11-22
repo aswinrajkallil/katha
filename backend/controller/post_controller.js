@@ -7,6 +7,9 @@ import Follow from "../models/Follow.js";
 import cloudinary from "../config/cloudinary.js";
 import uploadToCloudinary from "../utils/cloudinaryUpload.js";
 import { emitToRoom, emitToAll } from "../socket.js";
+import { isAdminRole } from "../utils/permissions.js";
+import { removePost } from "../services/moderationService.js";
+import { HttpError } from "../utils/httpError.js";
 
 // Helper: validate ObjectId
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -222,7 +225,7 @@ const getPosts = async (req, res) => {
     try {
         const pageNum = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limitNum = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
-        const status = req.user?.role === "admin" && ["draft", "published"].includes(req.query.status)
+        const status = isAdminRole(req.user?.role) && ["draft", "published"].includes(req.query.status)
             ? req.query.status : "published";
 
         const { query, sort } = await buildPostFilters(req.query, { status });
@@ -403,7 +406,7 @@ const getPostBySlug = async (req, res) => {
                 });
             }
             const isAuthor = post.author._id.toString() === req.user.id;
-            const isAdmin = req.user.role === "admin";
+            const isAdmin = isAdminRole(req.user.role);
             if (!isAuthor && !isAdmin) {
                 return res.status(403).json({
                     success: false,
@@ -414,7 +417,7 @@ const getPostBySlug = async (req, res) => {
 
         // Increment view count
         const [commentsCount, likesCount, userLike, userBookmark] = await Promise.all([
-            Comment.countDocuments({ post: post._id }),
+            Comment.countDocuments({ post: post._id, isDeleted: false }),
             Like.countDocuments({ post: post._id }),
             req.user?.id ? Like.exists({ post: post._id, user: req.user.id }) : false,
             req.user?.id ? Bookmark.exists({ post: post._id, user: req.user.id }) : false,
@@ -464,7 +467,7 @@ const getPostById = async (req, res) => {
                 });
             }
             const isAuthor = post.author._id.toString() === req.user.id;
-            const isAdmin = req.user.role === "admin";
+            const isAdmin = isAdminRole(req.user.role);
             if (!isAuthor && !isAdmin) {
                 return res.status(403).json({
                     success: false,
@@ -474,7 +477,7 @@ const getPostById = async (req, res) => {
         }
 
         const [commentsCount, likesCount, userLike, userBookmark] = await Promise.all([
-            Comment.countDocuments({ post: post._id }),
+            Comment.countDocuments({ post: post._id, isDeleted: false }),
             Like.countDocuments({ post: post._id }),
             req.user?.id ? Like.exists({ post: post._id, user: req.user.id }) : false,
             req.user?.id ? Bookmark.exists({ post: post._id, user: req.user.id }) : false,
@@ -516,12 +519,15 @@ const updatePost = async (req, res) => {
         }
 
         const isAuthor = post.author.toString() === req.user.id;
-        const isAdmin = req.user.role === "admin";
 
-        if (!isAuthor && !isAdmin) {
+        // Administrators edit other people's posts through PATCH /api/admin/posts/:id, which
+        // records the original text and an audit entry. Editing here would overwrite silently.
+        if (!isAuthor) {
             return res.status(403).json({
                 success: false,
-                message: "You are not authorized to update this post"
+                message: isAdminRole(req.user.role)
+                    ? "Use the admin panel to edit another author's post"
+                    : "You are not authorized to update this post"
             });
         }
 
@@ -537,8 +543,15 @@ const updatePost = async (req, res) => {
         if (type !== undefined && ["blog", "video"].includes(type)) post.type = type;
         if (videoUrl !== undefined) post.videoUrl = videoUrl;
         if (tags !== undefined) post.tags = tags;
-        if (status !== undefined && ["draft", "published"].includes(status))
+        if (status !== undefined && ["draft", "published"].includes(status)) {
+            if (status === "published" && post.status !== "published" && post.moderationHold) {
+                return res.status(403).json({
+                    success: false,
+                    message: "This post was unpublished by a moderator and can only be published again by staff"
+                });
+            }
             post.status = status;
+        }
         if (category !== undefined) {
             post.category = isValidId(category) ? category : null;
         }
@@ -635,12 +648,22 @@ const deletePost = async (req, res) => {
         }
 
         const isAuthor = post.author.toString() === req.user.id;
-        const isAdmin = req.user.role === "admin";
+        const isAdmin = isAdminRole(req.user.role);
 
         if (!isAuthor && !isAdmin) {
             return res.status(403).json({
                 success: false,
                 message: "You are not authorized to delete this post"
+            });
+        }
+
+        if (!isAuthor) {
+            // Staff removing someone else's post: audited, and respects the role hierarchy
+            await removePost(req.actor, id, { reason: req.body?.reason });
+            return res.status(200).json({
+                success: true,
+                message: "Post moved to Deleted Posts",
+                data: { _id: post._id }
             });
         }
 
@@ -659,6 +682,9 @@ const deletePost = async (req, res) => {
             data: { _id: post._id, deletedAt: post.deletedAt }
         });
     } catch (e) {
+        if (e instanceof HttpError) {
+            return res.status(e.status).json({ success: false, message: e.message });
+        }
         console.error("deletePost error:", e);
         return res.status(500).json({ success: false, message: "Something went wrong" });
     }
@@ -722,12 +748,19 @@ const restorePost = async (req, res) => {
         }
 
         const isAuthor = post.author.toString() === req.user.id;
-        const isAdmin = req.user.role === "admin";
+        const isAdmin = isAdminRole(req.user.role);
 
         if (!isAuthor && !isAdmin) {
             return res.status(403).json({
                 success: false,
                 message: "You are not authorized to restore this post"
+            });
+        }
+        // Staff removed it (deletedBy is someone other than the author): only staff can bring it back
+        if (!isAdmin && post.deletedBy && post.deletedBy.toString() !== post.author.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: "This post was removed by a moderator and cannot be restored by its author"
             });
         }
 
@@ -763,12 +796,18 @@ const permanentlyDeletePost = async (req, res) => {
         }
 
         const isAuthor = post.author.toString() === req.user.id;
-        const isAdmin = req.user.role === "admin";
+        const isAdmin = isAdminRole(req.user.role);
 
         if (!isAuthor && !isAdmin) {
             return res.status(403).json({
                 success: false,
                 message: "You are not authorized to delete this post"
+            });
+        }
+        if (!isAdmin && post.deletedBy && post.deletedBy.toString() !== post.author.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: "This post was removed by a moderator and cannot be permanently deleted by its author"
             });
         }
 
