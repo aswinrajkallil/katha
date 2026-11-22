@@ -1,3 +1,4 @@
+import { isStaff, hasPermission, homeFor } from "./pages/Admin/adminAccess";
 import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -32,6 +33,14 @@ const AdminDashboard = lazy(() => import("./pages/Admin/AdminDashboard"));
 const AdminUsers = lazy(() => import("./pages/Admin/AdminUsers"));
 const AdminUserDetail = lazy(() => import("./pages/Admin/AdminUserDetail"));
 const AdminPosts = lazy(() => import("./pages/Admin/AdminPosts"));
+const AdminComments = lazy(() => import("./pages/Admin/AdminComments"));
+const AdminReports = lazy(() => import("./pages/Admin/AdminReports"));
+const AdminCategories = lazy(() => import("./pages/Admin/AdminCategories"));
+const AdminFeatured = lazy(() => import("./pages/Admin/AdminFeatured"));
+const AdminAnalytics = lazy(() => import("./pages/Admin/AdminAnalytics"));
+const AdminManagement = lazy(() => import("./pages/Admin/AdminManagement"));
+const AdminActivity = lazy(() => import("./pages/Admin/AdminActivity"));
+const AdminSettings = lazy(() => import("./pages/Admin/AdminSettings"));
 
 const PageLoader = () => (
   <div style={{ padding: "48px 24px", textAlign: "center", color: "#70757a" }}>
@@ -46,10 +55,20 @@ const ProtectedRoute = ({ children }) => {
     return children;
 };
 
+// Any staff role may enter the console; each page additionally requires its own permission.
+// The API enforces all of this again on every request.
 const AdminRoute = ({ children }) => {
     const { user, loading } = useAuth();
     if (loading) return <PageLoader />;
-    if (!user || user.role !== "admin") return <Navigate to="/admin/login" replace />;
+    if (!user || !isStaff(user.role)) return <Navigate to="/admin/login" replace />;
+    return children;
+};
+
+const AdminPage = ({ permission, children }) => {
+    const { user } = useAuth();
+    if (!hasPermission(user?.role, permission)) {
+        return <Navigate to={homeFor(user?.role)} replace />;
+    }
     return children;
 };
 
@@ -73,10 +92,18 @@ function AppRoutes() {
                         </AdminRoute>
                     }
                 >
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="users" element={<AdminUsers />} />
-                    <Route path="users/:id" element={<AdminUserDetail />} />
-                    <Route path="posts" element={<AdminPosts />} />
+                    <Route index element={<AdminPage permission="dashboard:view"><AdminDashboard /></AdminPage>} />
+                    <Route path="users" element={<AdminPage permission="users:view"><AdminUsers /></AdminPage>} />
+                    <Route path="users/:id" element={<AdminPage permission="users:view"><AdminUserDetail /></AdminPage>} />
+                    <Route path="posts" element={<AdminPage permission="posts:view"><AdminPosts /></AdminPage>} />
+                    <Route path="comments" element={<AdminPage permission="comments:view"><AdminComments /></AdminPage>} />
+                    <Route path="reports" element={<AdminPage permission="reports:view"><AdminReports /></AdminPage>} />
+                    <Route path="categories" element={<AdminPage permission="categories:manage"><AdminCategories /></AdminPage>} />
+                    <Route path="featured" element={<AdminPage permission="featured:manage"><AdminFeatured /></AdminPage>} />
+                    <Route path="analytics" element={<AdminPage permission="analytics:view"><AdminAnalytics /></AdminPage>} />
+                    <Route path="management" element={<AdminPage permission="roles:manage"><AdminManagement /></AdminPage>} />
+                    <Route path="activity" element={<AdminPage permission="audit:view"><AdminActivity /></AdminPage>} />
+                    <Route path="settings" element={<AdminPage permission="settings:manage"><AdminSettings /></AdminPage>} />
                 </Route>
 
                 {/* Main Application Routes */}

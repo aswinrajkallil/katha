@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import ReportButton from "../ReportButton";
 import { useToast } from "../../context/ToastContext";
 import { useSocket, usePostRoom } from "../../context/SocketContext";
 import apiFetch, { apiQuery } from "../../api/api";
@@ -325,7 +326,7 @@ export default function PostDetails() {
   }
 
   const isAuthor = user && post.author && (user._id === post.author._id || user.id === post.author._id);
-  const isAdmin = user && user.role === "admin";
+  const isAdmin = user && (user.role === "admin" || user.role === "superadmin");
   const canModify = isAuthor || isAdmin;
   const authorUsername = post.author?.username || "anonymous";
 
@@ -485,6 +486,8 @@ export default function PostDetails() {
             <Share2 size={16} />
             <span>Share</span>
           </button>
+
+          <ReportButton targetType="post" targetId={post._id} ownerId={post.author?._id} className="reddit-action-pill" />
 
           {/* Views */}
           <div className="reddit-action-pill action-pill-static" aria-label={`${post.views || 0} views`}>

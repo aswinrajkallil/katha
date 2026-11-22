@@ -8,7 +8,7 @@ const SocketContext = createContext(null);
 const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export const SocketProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef(null);
 
@@ -45,11 +45,16 @@ export const SocketProvider = ({ children }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.unreadCount() });
     });
 
+    // A Super Admin changed this account's role: re-read /me so the UI matches the server
+    socket.on("auth:role-changed", () => {
+      refreshUser?.();
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [refreshUser]);
 
   // When auth user changes (login / logout), update socket auth and reconnect
   useEffect(() => {

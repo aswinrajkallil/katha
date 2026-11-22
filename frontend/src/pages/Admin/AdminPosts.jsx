@@ -1,301 +1,314 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Search,
-  X,
-  Eye,
-  Heart,
-  MessageCircle,
-  ExternalLink,
-  Trash2,
-  Filter,
-  FileText,
-  AlertCircle,
-  RefreshCw,
-  RotateCcw,
-  Archive,
-} from "lucide-react";
+import { Eye, Heart, MessageCircle, ExternalLink, Trash2, FileText, RotateCcw, Archive, Star, StarOff, Pencil, History, X, EyeOff } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import apiFetch, { apiQuery } from "../../api/api";
 import { queryKeys } from "../../api/queryClient";
 import UserAvatar from "../../components/UserAvatar";
-import ConfirmDialog from "../../components/ConfirmDialog";
+import { useAdminAccess, canModerateContentOf } from "./adminAccess";
+import {
+  PageHeader,
+  SearchInput,
+  FilterSelect,
+  Tabs,
+  Pagination,
+  TableState,
+  ErrorBox,
+  ReasonDialog,
+  RoleBadge,
+  StatusPill,
+  useDebounced,
+  mutationRequest,
+  formatDate,
+  humanize,
+} from "./AdminShared";
 import "./AdminPosts.css";
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return "";
-  try {
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-};
+const LIMIT = 10;
+
+function PostHistoryModal({ post, onClose }) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: queryKeys.adminPostHistory(post._id),
+    queryFn: () => apiQuery(`/admin/posts/${post._id}/history`),
+  });
+  return (
+    <div className="ax-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="ax-modal" role="dialog" aria-modal="true" aria-label="Post history">
+        <div className="ax-modal-head">
+          <div>
+            <h2>Moderation history</h2>
+            <p className="ax-muted">{post.title}</p>
+          </div>
+          <button type="button" className="ax-icon-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        {isLoading && <div className="skeleton-line" style={{ height: 60 }} />}
+        {isError && <ErrorBox title="Unable to load history" error={error} />}
+        {data && data.history.length === 0 && <p className="ax-muted">No moderation activity recorded for this post.</p>}
+        {data && data.history.length > 0 && (
+          <ul className="ax-history">
+            {data.history.map((h) => (
+              <li key={h._id}>
+                <time dateTime={h.createdAt}>{formatDate(h.createdAt, true)}</time>
+                <strong>{humanize(h.action)}</strong> by {h.actorUsername ? `@${h.actorUsername}` : "system"}
+                {h.reason && <div className="ax-muted">Reason: {h.reason}</div>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {data?.revisions?.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 18 }}>Previous versions ({data.revisions.length})</h3>
+            <ul className="ax-history">
+              {data.revisions.map((r) => (
+                <li key={r._id}>
+                  <time dateTime={r.createdAt}>{formatDate(r.createdAt, true)}</time>
+                  Changed: {(r.changedFields || []).join(", ") || "—"}
+                  {r.reason && <div className="ax-muted">Reason: {r.reason}</div>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EditPostModal({ post, categories, onClose, onSaved }) {
+  const toast = useToast();
+  const [form, setForm] = useState({
+    title: post.title || "",
+    excerpt: post.excerpt || "",
+    tags: (post.tags || []).join(", "),
+    category: post.category?._id || "",
+    reason: "",
+  });
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = useMutation({
+    mutationFn: () =>
+      mutationRequest(apiFetch, `/admin/posts/${post._id}`, {
+        method: "PATCH",
+        body: {
+          title: form.title,
+          excerpt: form.excerpt,
+          tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+          category: form.category || null,
+          reason: form.reason.trim(),
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Post updated");
+      onSaved();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const valid = form.title.trim() && form.reason.trim().length >= 3;
+  return (
+    <div className="ax-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form
+        className="ax-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit post"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) save.mutate();
+        }}
+      >
+        <div className="ax-modal-head">
+          <h2>Edit post (admin)</h2>
+          <button type="button" className="ax-icon-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="ax-muted">The original is kept in the post's history and the change is recorded in the activity log.</p>
+        <label className="ax-field">
+          <span className="ax-field-label">Title</span>
+          <input className="ax-input" value={form.title} onChange={set("title")} maxLength={200} required />
+        </label>
+        <label className="ax-field">
+          <span className="ax-field-label">Excerpt</span>
+          <textarea className="ax-textarea" rows={3} value={form.excerpt} onChange={set("excerpt")} />
+        </label>
+        <label className="ax-field">
+          <span className="ax-field-label">Tags (comma separated)</span>
+          <input className="ax-input" value={form.tags} onChange={set("tags")} />
+        </label>
+        <label className="ax-field">
+          <span className="ax-field-label">Category</span>
+          <select className="ax-input" value={form.category} onChange={set("category")}>
+            <option value="">No category</option>
+            {categories.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ax-field">
+          <span className="ax-field-label">Reason (required)</span>
+          <textarea className="ax-textarea" rows={2} value={form.reason} onChange={set("reason")} maxLength={1000} />
+        </label>
+        <div className="ax-row-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="ax-btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="ax-btn ax-btn-primary" disabled={!valid || save.isPending}>
+            {save.isPending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 export default function AdminPosts() {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { can, role } = useAdminAccess();
 
   const [searchInput, setSearchInput] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState(""); // "" | "published" | "draft"
-  const [showDeleted, setShowDeleted] = useState(false);
+  const search = useDebounced(searchInput.trim());
+  const [statusFilter, setStatusFilter] = useState("");
+  const [featuredFilter, setFeaturedFilter] = useState("");
+  const [view, setView] = useState("active");
   const [page, setPage] = useState(1);
-  const [postToDelete, setPostToDelete] = useState(null);
-  const [postToPurge, setPostToPurge] = useState(null);
+  const [dialog, setDialog] = useState(null); // { type: remove|purge|feature|unfeature|status, post }
+  const [editing, setEditing] = useState(null);
+  const [history, setHistory] = useState(null);
 
-  // Debounce search input by 300ms
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchInput.trim());
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
+  const showDeleted = view === "deleted";
+  useEffect(() => setPage(1), [search, statusFilter, featuredFilter, view]);
 
-  // Fetch paginated posts
-  const queryKey = queryKeys.adminPosts({
-    page,
-    status: statusFilter,
-    search: debouncedSearch,
-    deleted: showDeleted,
-  });
-
-  const {
-    data: postsData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey,
+  const params = { page, status: statusFilter, search, deleted: showDeleted, featured: featuredFilter };
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: queryKeys.adminPosts(params),
     queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: "10",
-      });
-      if (statusFilter) params.set("status", statusFilter);
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (showDeleted) params.set("deleted", "true");
-      return apiQuery(`/admin/posts?${params.toString()}`);
+      const q = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
+      if (statusFilter && !showDeleted) q.set("status", statusFilter);
+      if (featuredFilter && !showDeleted) q.set("featured", featuredFilter);
+      if (search) q.set("search", search);
+      if (showDeleted) q.set("deleted", "true");
+      return apiQuery(`/admin/posts?${q}`);
     },
     staleTime: 30 * 1000,
+    placeholderData: (prev) => prev,
   });
 
-  const posts = postsData?.posts || [];
-  const pagination = postsData?.pagination || { total: 0, page: 1, limit: 10, totalPages: 1 };
-
-  // Optimistic deletion mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (postId) => {
-      const res = await apiFetch(`/admin/posts/${postId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Failed to delete post");
-      }
-      return data;
-    },
-    onMutate: async (postId) => {
-      // Cancel any outgoing refetches so they don't overwrite optimistic update
-      await queryClient.cancelQueries({ queryKey });
-
-      // Snapshot previous posts
-      const previousData = queryClient.getQueryData(queryKey);
-
-      // Optimistically update query data
-      if (previousData?.posts) {
-        queryClient.setQueryData(queryKey, {
-          ...previousData,
-          posts: previousData.posts.filter((p) => p._id !== postId),
-          pagination: {
-            ...previousData.pagination,
-            total: Math.max(0, (previousData.pagination?.total || 1) - 1),
-          },
-        });
-      }
-
-      return { previousData };
-    },
-    onError: (err, postId, context) => {
-      // Rollback to previous state on error
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKey, context.previousData);
-      }
-      toast.error(err.message || "Could not delete post");
-    },
-    onSuccess: () => {
-      toast.success("Post moved to Deleted Posts");
-    },
-    onSettled: () => {
-      // Invalidate relevant queries to keep counts and feeds in sync
-      queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
-    },
+  const { data: categories = [] } = useQuery({
+    queryKey: queryKeys.categories(),
+    queryFn: () => apiQuery("/categories"),
+    staleTime: 5 * 60 * 1000,
+    enabled: can("posts:edit"),
   });
 
-  // Restore a soft-deleted post
-  const restoreMutation = useMutation({
-    mutationFn: async (postId) => {
-      const res = await apiFetch(`/admin/posts/${postId}/restore`, { method: "PATCH" });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to restore post");
-      return data;
-    },
-    onSuccess: (data) => {
-      toast.success(data.message || "Post restored");
-      queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
-    },
-    onError: (err) => toast.error(err.message || "Could not restore post"),
-  });
+  const posts = data?.posts || [];
 
-  // Permanently delete a post that is already in the Deleted Posts view
-  const purgeMutation = useMutation({
-    mutationFn: async (postId) => {
-      const res = await apiFetch(`/admin/posts/${postId}/permanent`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete post");
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Post permanently deleted");
-      queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
-    },
-    onError: (err) => toast.error(err.message || "Could not delete post"),
-  });
-
-  const handleDeleteConfirm = () => {
-    if (!postToDelete) return;
-    const id = postToDelete._id;
-    setPostToDelete(null);
-    deleteMutation.mutate(id);
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "featured"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.adminStats() });
   };
 
-  const handlePurgeConfirm = () => {
-    if (!postToPurge) return;
-    const id = postToPurge._id;
-    setPostToPurge(null);
-    purgeMutation.mutate(id);
+  const act = useMutation({
+    mutationFn: ({ type, post, reason }) => {
+      const id = post._id;
+      switch (type) {
+        case "remove":
+          return mutationRequest(apiFetch, `/admin/posts/${id}`, { method: "DELETE", body: { reason } });
+        case "restore":
+          return mutationRequest(apiFetch, `/admin/posts/${id}/restore`, { method: "PATCH", body: { reason } });
+        case "purge":
+          return mutationRequest(apiFetch, `/admin/posts/${id}/permanent`, { method: "DELETE", body: { reason } });
+        case "feature":
+        case "unfeature":
+          return mutationRequest(apiFetch, `/admin/posts/${id}/feature`, { method: "PATCH", body: { featured: type === "feature", reason } });
+        case "publish":
+        case "unpublish":
+          return mutationRequest(apiFetch, `/admin/posts/${id}/status`, {
+            method: "PATCH",
+            body: { status: type === "publish" ? "published" : "draft", reason },
+          });
+        default:
+          throw new Error("Unknown action");
+      }
+    },
+    onSuccess: (res) => {
+      toast.success(res.message || "Done");
+      setDialog(null);
+      refresh();
+    },
+    onError: (e) => {
+      toast.error(e.message || "Action failed");
+      setDialog(null);
+    },
+  });
+
+  const DIALOGS = {
+    remove: { title: "Remove this post?", confirm: "Remove post", required: true, text: (p) => `"${p.title}" will be hidden from the site and moved to Removed Posts. It can be restored.` },
+    purge: { title: "Delete this post forever?", confirm: "Delete forever", required: true, text: (p) => `"${p.title}" and its comments, likes and images will be permanently removed. This cannot be undone.` },
+    unpublish: { title: "Unpublish this post?", confirm: "Unpublish", required: true, text: (p) => `"${p.title}" will return to draft and disappear from the public site.` },
+    publish: { title: "Publish this post?", confirm: "Publish", required: false, danger: false, text: (p) => `"${p.title}" will become visible on the public site.` },
+    feature: { title: "Feature this post?", confirm: "Feature", required: false, danger: false, text: (p) => `"${p.title}" will appear in featured posts once published.` },
+    unfeature: { title: "Remove from featured?", confirm: "Unfeature", required: false, danger: false, text: (p) => `"${p.title}" will no longer be featured.` },
+    restore: { title: "Restore this post?", confirm: "Restore", required: false, danger: false, text: (p) => `"${p.title}" will be visible again.` },
   };
+  const current = dialog ? DIALOGS[dialog.type] : null;
 
   return (
     <div className="admin-page-container">
-      {/* Header */}
-      <div className="admin-page-header">
-        <div>
-          <h1 className="admin-page-title">Posts Moderation</h1>
-          <p className="admin-page-subtitle">
-            {showDeleted
-              ? "Posts removed from the platform. Restore them or delete them for good."
-              : "Search, inspect, and remove posts across the platform"}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Posts Moderation"
+        subtitle={showDeleted ? "Removed posts. Restore them or delete them for good." : "Search, inspect, feature and moderate posts across the platform"}
+      />
 
-      {/* View toggle: Active vs Deleted */}
-      <div className="admin-posts-status-filters" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={`admin-filter-pill ${!showDeleted ? "active" : ""}`}
-          onClick={() => {
-            setShowDeleted(false);
-            setPage(1);
-          }}
-        >
-          <FileText size={14} /> Active Posts
-        </button>
-        <button
-          type="button"
-          className={`admin-filter-pill ${showDeleted ? "active" : ""}`}
-          onClick={() => {
-            setShowDeleted(true);
-            setStatusFilter("");
-            setPage(1);
-          }}
-        >
-          <Archive size={14} /> Deleted Posts
-        </button>
-      </div>
+      <Tabs
+        value={view}
+        onChange={setView}
+        tabs={[
+          { value: "active", label: "Active Posts", icon: <FileText size={14} /> },
+          { value: "deleted", label: "Removed Posts", icon: <Archive size={14} /> },
+        ]}
+      />
 
-      {/* Toolbar: Search + Status Filter */}
-      <div className="admin-posts-toolbar">
-        <div className="admin-search-box">
-          <Search size={18} className="admin-search-icon" />
-          <input
-            type="text"
-            placeholder="Search by title, excerpt, or tags..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-          {searchInput && (
-            <button
-              type="button"
-              className="admin-search-clear"
-              onClick={() => setSearchInput("")}
-              aria-label="Clear search"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
-
+      <div className="ax-toolbar">
+        <SearchInput value={searchInput} onChange={setSearchInput} placeholder="Search by title, excerpt, or tags..." label="Search posts" />
         {!showDeleted && (
-          <div className="admin-posts-status-filters">
-            <button
-              type="button"
-              className={`admin-filter-pill ${statusFilter === "" ? "active" : ""}`}
-              onClick={() => {
-                setStatusFilter("");
-                setPage(1);
-              }}
-            >
-              All Statuses
-            </button>
-            <button
-              type="button"
-              className={`admin-filter-pill ${statusFilter === "published" ? "active" : ""}`}
-              onClick={() => {
-                setStatusFilter("published");
-                setPage(1);
-              }}
-            >
-              Published
-            </button>
-            <button
-              type="button"
-              className={`admin-filter-pill ${statusFilter === "draft" ? "active" : ""}`}
-              onClick={() => {
-                setStatusFilter("draft");
-                setPage(1);
-              }}
-            >
-              Drafts
-            </button>
-          </div>
+          <>
+            <FilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "", label: "All statuses" },
+                { value: "published", label: "Published" },
+                { value: "draft", label: "Drafts" },
+              ]}
+            />
+            {can("posts:feature") && (
+              <FilterSelect
+                label="Featured"
+                value={featuredFilter}
+                onChange={setFeaturedFilter}
+                options={[
+                  { value: "", label: "Any" },
+                  { value: "true", label: "Featured" },
+                  { value: "false", label: "Not featured" },
+                ]}
+              />
+            )}
+          </>
         )}
       </div>
 
-      {/* Error State */}
-      {isError && (
-        <div className="admin-error-box">
-          <AlertCircle size={28} color="#dc2626" />
-          <div className="admin-error-content">
-            <h3>Unable to load posts</h3>
-            <p>{error?.message || "An unexpected error occurred while fetching posts."}</p>
-          </div>
-          <button type="button" className="admin-btn-secondary" onClick={() => refetch()}>
-            <RefreshCw size={14} /> Retry
-          </button>
-        </div>
-      )}
-
-      {/* Table Card */}
-      {!isError && (
+      {isError && !data ? (
+        <ErrorBox title="Unable to load posts" error={error} onRetry={refetch} />
+      ) : (
         <div className="admin-table-card">
           <div className="admin-table-wrapper">
             <table className="admin-table">
@@ -312,188 +325,153 @@ export default function AdminPosts() {
                 </tr>
               </thead>
               <tbody>
-                {isLoading ? (
-                  Array.from({ length: 6 }).map((_, idx) => (
-                    <tr key={idx}>
-                      <td colSpan={8}>
-                        <div className="skeleton-line" style={{ height: 26 }} />
-                      </td>
-                    </tr>
-                  ))
-                ) : posts.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="admin-table-empty">
-                      <FileText size={32} color="#94a3b8" style={{ margin: "0 auto 8px" }} />
-                      <p>
-                        {showDeleted
-                          ? "No deleted posts."
-                          : "No posts found matching the filter."}
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  posts.map((post) => (
-                    <tr key={post._id}>
-                      <td className="admin-post-title-cell">
-                        <span className="admin-post-title-text" title={post.title}>
-                          {post.title}
-                        </span>
-                        {post.category?.name && (
-                          <span className="admin-post-category-tag">{post.category.name}</span>
-                        )}
-                      </td>
-                      <td>
-                        {post.author ? (
-                          <Link
-                            to={`/admin/users/${post.author._id}`}
-                            className="admin-post-author-link"
-                          >
-                            <UserAvatar user={post.author} size={24} />
-                            <div className="admin-post-author-info">
-                              <span className="admin-post-author-name">
-                                {post.author.fullName || post.author.username}
-                              </span>
-                              <span className="admin-post-author-handle">
-                                @{post.author.username}
-                              </span>
-                            </div>
-                          </Link>
-                        ) : (
-                          <span className="admin-deleted-author">[deleted author]</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`admin-status-badge ${post.status}`}>
-                          {post.status}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="admin-metric-inline">
-                          <Eye size={14} color="#64748b" />
-                          <span>{post.views ?? 0}</span>
-                        </span>
-                      </td>
-                      <td>
-                        <span className="admin-metric-inline">
-                          <Heart size={14} color="#dc2626" />
-                          <span>{post.likesCount ?? 0}</span>
-                        </span>
-                      </td>
-                      <td>
-                        <span className="admin-metric-inline">
-                          <MessageCircle size={14} color="#e8590c" />
-                          <span>{post.commentsCount ?? 0}</span>
-                        </span>
-                      </td>
-                      <td className="admin-table-date">{formatDate(post.createdAt)}</td>
-                      <td style={{ textAlign: "right" }}>
-                        <div className="admin-table-row-actions">
-                          <Link
-                            to={`/post/${post._id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="admin-post-action-btn view"
-                            title="View post on site"
-                          >
-                            <ExternalLink size={15} />
-                            <span>View</span>
-                          </Link>
-                          {showDeleted ? (
-                            <>
+                <TableState
+                  isLoading={isLoading}
+                  isError={isError}
+                  error={error}
+                  onRetry={refetch}
+                  isEmpty={posts.length === 0}
+                  emptyText={showDeleted ? "No removed posts." : "No posts found matching the filter."}
+                  colSpan={8}
+                >
+                  {posts.map((post) => {
+                    const mayAct = canModerateContentOf(role, post.author?.role);
+                    return (
+                      <tr key={post._id}>
+                        <td className="admin-post-title-cell">
+                          <span className="admin-post-title-text" title={post.title}>
+                            {post.isFeatured && <Star size={13} color="#e8590c" aria-label="Featured" style={{ marginRight: 4 }} />}
+                            {post.title}
+                          </span>
+                          {post.category?.name && <span className="admin-post-category-tag">{post.category.name}</span>}
+                          {post.moderationReason && showDeleted && <span className="ax-muted">Reason: {post.moderationReason}</span>}
+                        </td>
+                        <td>
+                          {post.author ? (
+                            <Link to={`/admin/users/${post.author._id}`} className="admin-post-author-link">
+                              <UserAvatar user={post.author} size={24} />
+                              <div className="admin-post-author-info">
+                                <span className="admin-post-author-name">{post.author.fullName || post.author.username}</span>
+                                <span className="admin-post-author-handle">@{post.author.username}</span>
+                              </div>
+                              {post.author.role && post.author.role !== "user" && <RoleBadge role={post.author.role} />}
+                            </Link>
+                          ) : (
+                            <span className="admin-deleted-author">[deleted author]</span>
+                          )}
+                        </td>
+                        <td>
+                          <StatusPill status={showDeleted ? "removed" : post.status} />
+                        </td>
+                        <td>
+                          <span className="admin-metric-inline">
+                            <Eye size={14} color="#64748b" />
+                            <span>{post.views ?? 0}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <span className="admin-metric-inline">
+                            <Heart size={14} color="#dc2626" />
+                            <span>{post.likesCount ?? 0}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <span className="admin-metric-inline">
+                            <MessageCircle size={14} color="#e8590c" />
+                            <span>{post.commentsCount ?? 0}</span>
+                          </span>
+                        </td>
+                        <td className="admin-table-date">{formatDate(post.createdAt)}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <div className="ax-row-actions">
+                            {!showDeleted && (
+                              <Link to={`/post/${post._id}`} target="_blank" rel="noopener noreferrer" className="admin-post-action-btn view" title="View post on site">
+                                <ExternalLink size={15} />
+                                <span>View</span>
+                              </Link>
+                            )}
+                            <button type="button" className="admin-post-action-btn" onClick={() => setHistory(post)} title="Moderation history">
+                              <History size={15} />
+                              <span>History</span>
+                            </button>
+                            {!showDeleted && mayAct && can("posts:edit") && (
+                              <button type="button" className="admin-post-action-btn" onClick={() => setEditing(post)}>
+                                <Pencil size={15} />
+                                <span>Edit</span>
+                              </button>
+                            )}
+                            {!showDeleted && mayAct && can("posts:publish") && (
                               <button
                                 type="button"
                                 className="admin-post-action-btn"
-                                onClick={() => restoreMutation.mutate(post._id)}
-                                disabled={restoreMutation.isPending}
-                                title="Restore post"
+                                onClick={() => setDialog({ type: post.status === "published" ? "unpublish" : "publish", post })}
                               >
+                                {post.status === "published" ? <EyeOff size={15} /> : <Eye size={15} />}
+                                <span>{post.status === "published" ? "Unpublish" : "Publish"}</span>
+                              </button>
+                            )}
+                            {!showDeleted && mayAct && can("posts:feature") && post.status === "published" && (
+                              <button type="button" className="admin-post-action-btn" onClick={() => setDialog({ type: post.isFeatured ? "unfeature" : "feature", post })}>
+                                {post.isFeatured ? <StarOff size={15} /> : <Star size={15} />}
+                                <span>{post.isFeatured ? "Unfeature" : "Feature"}</span>
+                              </button>
+                            )}
+                            {showDeleted && mayAct && can("posts:restore") && (
+                              <button type="button" className="admin-post-action-btn" onClick={() => setDialog({ type: "restore", post })}>
                                 <RotateCcw size={15} />
                                 <span>Restore</span>
                               </button>
-                              <button
-                                type="button"
-                                className="admin-post-action-btn delete"
-                                onClick={() => setPostToPurge(post)}
-                                title="Delete permanently"
-                              >
+                            )}
+                            {showDeleted && mayAct && can("posts:purge") && (
+                              <button type="button" className="admin-post-action-btn delete" onClick={() => setDialog({ type: "purge", post })}>
                                 <Trash2 size={15} />
                                 <span>Delete Forever</span>
                               </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              className="admin-post-action-btn delete"
-                              onClick={() => setPostToDelete(post)}
-                              title="Delete post"
-                            >
-                              <Trash2 size={15} />
-                              <span>Delete</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                            )}
+                            {!showDeleted && mayAct && can("posts:remove") && (
+                              <button type="button" className="admin-post-action-btn delete" onClick={() => setDialog({ type: "remove", post })}>
+                                <Trash2 size={15} />
+                                <span>Remove</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </TableState>
               </tbody>
             </table>
           </div>
-
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="admin-pagination-bar">
-              <span className="admin-pagination-info">
-                Showing {(page - 1) * 10 + 1}–
-                {Math.min(page * 10, pagination.total)} of {pagination.total} posts
-              </span>
-              <div className="admin-pagination-actions">
-                <button
-                  type="button"
-                  className="admin-pagination-btn"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <span className="admin-pagination-current">
-                  Page {page} of {pagination.totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="admin-pagination-btn"
-                  disabled={page >= pagination.totalPages}
-                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination pagination={data?.pagination} page={page} onPage={setPage} noun="posts" />
         </div>
       )}
 
-      {/* Delete Post Confirm Dialog (soft delete) */}
-      <ConfirmDialog
-        isOpen={Boolean(postToDelete)}
-        title="Delete this post?"
-        message={`"${postToDelete?.title}" will be hidden from the site and moved to Deleted Posts. You can restore it later.`}
-        confirmText="Delete Post"
-        loading={deleteMutation.isPending}
-        onConfirm={handleDeleteConfirm}
-        onClose={() => setPostToDelete(null)}
-      />
-
-      {/* Permanent Delete Confirm Dialog */}
-      <ConfirmDialog
-        isOpen={Boolean(postToPurge)}
-        title="Delete this post forever?"
-        message={`"${postToPurge?.title}" and all of its comments, likes, and images will be permanently removed. This cannot be undone.`}
-        confirmText="Delete Forever"
-        loading={purgeMutation.isPending}
-        onConfirm={handlePurgeConfirm}
-        onClose={() => setPostToPurge(null)}
-      />
+      {current && (
+        <ReasonDialog
+          isOpen
+          title={current.title}
+          message={current.text(dialog.post)}
+          confirmText={current.confirm}
+          danger={current.danger !== false}
+          reasonRequired={current.required || role === "moderator"}
+          loading={act.isPending}
+          onConfirm={(reason) => act.mutate({ type: dialog.type, post: dialog.post, reason })}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {editing && (
+        <EditPostModal
+          post={editing}
+          categories={categories}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            refresh();
+          }}
+        />
+      )}
+      {history && <PostHistoryModal post={history} onClose={() => setHistory(null)} />}
     </div>
   );
 }

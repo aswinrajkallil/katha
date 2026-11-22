@@ -1,9 +1,31 @@
-const buckets = new Map();
-
 // Lightweight per-process limiter. Use a shared store (e.g. Redis) for multi-instance production deployments.
-const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 100, message = "Too many requests. Please try again later." } = {}) => {
+//
+// Every limiter owns its own buckets. Previously all limiters shared one map keyed only by IP, so
+// a login attempt also consumed the admin limiter's budget (and vice versa).
+//
+// `keyGenerator` lets a limiter count per authenticated user instead of per IP, which stops one
+// account from flooding an endpoint while spreading requests over many IPs.
+const rateLimit = ({
+    windowMs = 15 * 60 * 1000,
+    max = 100,
+    message = "Too many requests. Please try again later.",
+    keyGenerator = null
+} = {}) => {
+    const buckets = new Map();
+
+    const sweep = setInterval(() => {
+        const now = Date.now();
+        for (const [key, bucket] of buckets) {
+            if (now >= bucket.resetAt) buckets.delete(key);
+        }
+    }, Math.max(windowMs, 60 * 1000));
+    sweep.unref?.();
+
     return (req, res, next) => {
-        const key = req.ip || req.socket.remoteAddress || "unknown";
+        // Automated tests make many requests from one address; opt back in with RATE_LIMIT_ENABLED=true.
+        if (process.env.NODE_ENV === "test" && process.env.RATE_LIMIT_ENABLED !== "true") return next();
+
+        const key = (keyGenerator && keyGenerator(req)) || req.ip || req.socket.remoteAddress || "unknown";
         const now = Date.now();
         let bucket = buckets.get(key);
         if (!bucket || now >= bucket.resetAt) {

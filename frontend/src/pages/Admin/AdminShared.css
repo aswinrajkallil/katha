@@ -1,0 +1,125 @@
+/* Shared admin building blocks (roles, pills, filters, dialogs, charts). Matches the existing admin palette. */
+
+.ax-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Role badges */
+.ax-role {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+}
+.ax-role-superadmin { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.ax-role-admin { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.ax-role-moderator { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+.ax-role-user { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+
+/* Status pills */
+.ax-pill {
+  display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid #e2e8f0; background: #f1f5f9; color: #475569; white-space: nowrap;
+}
+.ax-pill-pending, .ax-pill-draft, .ax-pill-unpublished { background: #fef9c3; color: #854d0e; border-color: #fef08a; }
+.ax-pill-under-review { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.ax-pill-resolved, .ax-pill-published, .ax-pill-active, .ax-pill-visible { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.ax-pill-dismissed { background: #f1f5f9; color: #64748b; }
+.ax-pill-deleted, .ax-pill-removed { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+
+/* Filters */
+.ax-toolbar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+.ax-toolbar .admin-search-box { flex: 1 1 260px; }
+.ax-select { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+.ax-select-label { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+.ax-select select, .ax-range-custom input, .ax-input {
+  padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+  font-size: 0.875rem; color: #0f172a; font-family: inherit; outline: none; box-sizing: border-box;
+}
+.ax-select select:focus, .ax-range-custom input:focus, .ax-input:focus, .ax-textarea:focus {
+  border-color: #e8590c; box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.15);
+}
+.ax-tabs { margin-bottom: 14px; flex-wrap: wrap; }
+.ax-tab-count {
+  margin-left: 6px; background: #e2e8f0; color: #334155; border-radius: 999px;
+  font-size: 0.7rem; padding: 1px 7px; font-weight: 700;
+}
+.ax-range { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.ax-range-custom { display: flex; gap: 10px; align-items: flex-end; }
+.ax-range-custom label { display: flex; flex-direction: column; gap: 4px; }
+
+.ax-inline-error { color: #dc2626; margin-bottom: 8px; display: inline-flex; gap: 6px; align-items: center; }
+
+/* Form fields in dialogs / panels */
+.ax-field { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.ax-field-label { font-size: 0.78rem; font-weight: 700; color: #475569; }
+.ax-textarea {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+  font-family: inherit; font-size: 0.9rem; resize: vertical; outline: none; min-height: 72px;
+}
+
+/* Buttons used by new pages (same look as existing row actions) */
+.ax-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 0.82rem; font-weight: 600;
+  border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer;
+  text-decoration: none; transition: all 0.15s ease; font-family: inherit;
+}
+.ax-btn:hover:not(:disabled) { background: #f1f5f9; border-color: #94a3b8; }
+.ax-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ax-btn-primary { background: #e8590c; border-color: #e8590c; color: #fff; }
+.ax-btn-primary:hover:not(:disabled) { background: #c2410c; border-color: #c2410c; }
+.ax-btn-danger { background: #fff1f2; border-color: #fecdd3; color: #e11d48; }
+.ax-btn-danger:hover:not(:disabled) { background: #ffe4e6; border-color: #fda4af; }
+.ax-btn:focus-visible, .ax-link-btn:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
+.ax-link-btn { background: none; border: none; color: #e8590c; font-weight: 600; cursor: pointer; padding: 0; font-size: inherit; font-family: inherit; }
+.ax-row-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Panels */
+.ax-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.ax-panel h2 { margin: 0 0 12px; font-size: 1rem; color: #0f172a; }
+.ax-panel-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 20px; }
+.ax-muted { color: #64748b; font-size: 0.85rem; }
+.ax-cell-text { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.ax-cell-wrap { max-width: 360px; white-space: normal; word-break: break-word; }
+.ax-user-mini { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Stat tiles */
+.ax-stat-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 20px; }
+.ax-stat { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; }
+.ax-stat-label { display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+.ax-stat-value { display: block; font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-top: 4px; }
+.ax-stat-sub { display: block; font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+
+/* Charts (inline SVG, no library) */
+.ax-chart { width: 100%; }
+.ax-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.ax-chart-title { font-size: 0.9rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+.ax-chart-sub { font-size: 0.75rem; color: #64748b; margin: 0 0 8px; }
+.ax-chart-legend { display: flex; gap: 14px; font-size: 0.75rem; color: #475569; margin-top: 6px; flex-wrap: wrap; }
+.ax-chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.ax-chart-empty { color: #94a3b8; font-size: 0.85rem; padding: 28px 0; text-align: center; }
+.ax-bars { display: flex; flex-direction: column; gap: 8px; }
+.ax-bar-row { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 10px; align-items: center; font-size: 0.82rem; }
+.ax-bar-track { background: #f1f5f9; border-radius: 999px; height: 8px; overflow: hidden; }
+.ax-bar-fill { background: #e8590c; height: 100%; border-radius: 999px; }
+.ax-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #334155; }
+
+/* Details / history */
+.ax-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ax-history li { border-left: 3px solid #e2e8f0; padding: 2px 0 2px 12px; font-size: 0.85rem; }
+.ax-history time { color: #64748b; font-size: 0.75rem; display: block; }
+.ax-quote { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 0.875rem; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; }
+
+/* Slide-over / modal for details */
+.ax-modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ax-modal { background: #fff; border-radius: 14px; width: min(720px, 100%); max-height: 90vh; overflow: auto; padding: 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+.ax-modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.ax-modal-head h2 { margin: 0; font-size: 1.15rem; }
+.ax-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; color: #64748b; border-radius: 6px; display: inline-flex; }
+.ax-icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+
+@media (max-width: 640px) {
+  .ax-toolbar { align-items: stretch; }
+  .ax-select { flex: 1 1 140px; }
+  .ax-bar-row { grid-template-columns: 1fr auto; }
+  .ax-bar-row .ax-bar-track { grid-column: 1 / -1; order: 3; }
+  .ax-modal { padding: 16px; }
+}

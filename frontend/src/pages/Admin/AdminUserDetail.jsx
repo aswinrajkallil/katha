@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  ShieldCheck,
   Calendar,
   Mail,
   MapPin,
@@ -27,6 +26,8 @@ import apiFetch, { apiQuery } from "../../api/api";
 import { queryKeys } from "../../api/queryClient";
 import UserAvatar from "../../components/UserAvatar";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import { RoleBadge, ReasonDialog } from "./AdminShared";
+import { canModerateContentOf, ROLE_LABELS } from "./adminAccess";
 import "./AdminUserDetail.css";
 
 const formatDate = (dateStr) => {
@@ -68,6 +69,10 @@ export default function AdminUserDetail() {
   const [confirmPurgeInput, setConfirmPurgeInput] = useState("");
   const [purgingUser, setPurgingUser] = useState(false);
 
+  const [roleChange, setRoleChange] = useState(null);
+  const [roleReason, setRoleReason] = useState("");
+  const [changingRole, setChangingRole] = useState(false);
+
   // 1. Fetch user detail & counts
   const {
     data: userData,
@@ -103,11 +108,11 @@ export default function AdminUserDetail() {
   const postsPagination = postsData?.pagination || { total: 0, page: 1, limit: 10, totalPages: 1 };
 
   // Single post deletion
-  const handleDeletePost = async () => {
+  const handleDeletePost = async (reason) => {
     if (!postToDelete) return;
     setDeletingPost(true);
     try {
-      const res = await apiFetch(`/admin/posts/${postToDelete._id}`, { method: "DELETE" });
+      const res = await apiFetch(`/admin/posts/${postToDelete._id}`, { method: "DELETE", body: JSON.stringify({ reason }) });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete post");
 
@@ -229,9 +234,36 @@ export default function AdminUserDetail() {
     }
   };
 
+  const handleRoleChange = async () => {
+    if (!targetUser || !roleChange) return;
+    setChangingRole(true);
+    try {
+      const res = await apiFetch(`/admin/management/users/${targetUser._id}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: roleChange, confirm: true, reason: roleReason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to change role");
+      toast.success(data.message || "Role updated");
+      setRoleChange(null);
+      setRoleReason("");
+      queryClient.invalidateQueries({ queryKey: ["admin"] });
+    } catch (err) {
+      toast.error(err.message || "Could not change role");
+      setRoleChange(null);
+    } finally {
+      setChangingRole(false);
+    }
+  };
+
   const isSelf = currentAdmin && targetUser && (currentAdmin._id === targetUser._id || currentAdmin.id === targetUser._id);
-  const isTargetAdmin = targetUser?.role === "admin";
-  const canDeleteUser = !isSelf && !isTargetAdmin;
+  const isTargetStaff = targetUser && targetUser.role !== "user";
+  // The server decides what the signed-in staff member may do to this account
+  const actions = userData?.actions || {};
+  const canDeleteUser = targetUser?.isDeleted ? Boolean(actions.canPurge) : Boolean(actions.canDeactivate);
+  const mayModeratePosts = canModerateContentOf(currentAdmin?.role, targetUser?.role);
+  const reports = userData?.reports || {};
+  const activity = userData?.activity || {};
 
   if (userLoading) {
     return (
@@ -287,7 +319,7 @@ export default function AdminUserDetail() {
             type="button"
             className="admin-btn-secondary"
             onClick={handleRestoreUser}
-            disabled={restoringUser}
+            disabled={restoringUser || !actions.canRestore}
           >
             <RotateCcw size={14} /> {restoringUser ? "Restoring..." : "Restore Account"}
           </button>
@@ -301,10 +333,7 @@ export default function AdminUserDetail() {
           <div className="admin-user-header-meta">
             <div className="admin-user-header-name-row">
               <h1 className="admin-user-header-title">{targetUser.fullName || targetUser.username}</h1>
-              <span className={`admin-role-pill ${targetUser.role === "admin" ? "admin" : "user"}`}>
-                {targetUser.role === "admin" && <ShieldCheck size={12} />}
-                {targetUser.role}
-              </span>
+              <RoleBadge role={targetUser.role} />
             </div>
             <span className="admin-user-header-handle">@{targetUser.username}</span>
 
@@ -358,7 +387,25 @@ export default function AdminUserDetail() {
             <span className="admin-count-num">{counts.following}</span>
             <span className="admin-count-label">Following</span>
           </div>
+          <div className="admin-count-item">
+            <span className="admin-count-num">{reports.againstOpen ?? 0}</span>
+            <span className="admin-count-label">Open reports against</span>
+          </div>
         </div>
+        <p className="ax-muted" style={{ margin: "12px 0 0" }}>
+          {activity.lastActiveAt ? `Last active ${formatDate(activity.lastActiveAt)}` : "No recent activity recorded"} · {reports.againstTotal ?? 0} report(s) received in total · {reports.filed ?? 0} filed
+          {targetUser.roleChangedAt ? ` · role changed ${formatDate(targetUser.roleChangedAt)}` : ""}
+        </p>
+
+        {actions.roleOptions?.length > 0 && (
+          <div className="ax-row-actions" style={{ marginTop: 12, justifyContent: "flex-start" }} aria-label="Change role">
+            {actions.roleOptions.map((r) => (
+              <button key={r} type="button" className={`ax-btn ${r === "user" ? "ax-btn-danger" : ""}`} onClick={() => setRoleChange(r)}>
+                {r === "user" ? "Remove staff access" : `Make ${ROLE_LABELS[r]}`}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* User Posts Section */}
@@ -475,7 +522,7 @@ export default function AdminUserDetail() {
                             <ExternalLink size={15} />
                             <span>View</span>
                           </Link>
-                          {post.isDeleted ? (
+                          {!mayModeratePosts ? null : post.isDeleted ? (
                             <>
                               <button
                                 type="button"
@@ -570,13 +617,13 @@ export default function AdminUserDetail() {
 
         <div className="admin-danger-action-row">
           {isSelf ? (
+            <span className="admin-danger-disabled-hint">You cannot delete your own account from the admin console.</span>
+          ) : !canDeleteUser && isTargetStaff ? (
             <span className="admin-danger-disabled-hint">
-              You cannot delete your own admin account.
+              You cannot deactivate an account at or above your own level. A Super Admin can remove staff access first.
             </span>
-          ) : isTargetAdmin ? (
-            <span className="admin-danger-disabled-hint">
-              Another administrator account cannot be deleted. Demote role first if necessary.
-            </span>
+          ) : !canDeleteUser ? (
+            <span className="admin-danger-disabled-hint">You do not have permission for this action.</span>
           ) : null}
 
           {targetUser.isDeleted ? (
@@ -610,15 +657,37 @@ export default function AdminUserDetail() {
       </section>
 
       {/* Delete Post Confirm Dialog (soft delete) */}
-      <ConfirmDialog
+      <ReasonDialog
         isOpen={Boolean(postToDelete)}
-        title="Delete this post?"
-        message={`"${postToDelete?.title}" will be hidden from the site and moved to Deleted Posts. You can restore it later.`}
-        confirmText="Delete Post"
+        title="Remove this post?"
+        message={`"${postToDelete?.title}" will be hidden from the site and moved to Removed Posts. You can restore it later.`}
+        confirmText="Remove Post"
+        reasonRequired
         loading={deletingPost}
         onConfirm={handleDeletePost}
         onClose={() => setPostToDelete(null)}
       />
+
+      {/* Role change (Super Admin only; options come from the server) */}
+      <ConfirmDialog
+        isOpen={Boolean(roleChange)}
+        title={roleChange ? `Change @${targetUser.username} to ${ROLE_LABELS[roleChange]}?` : ""}
+        message={
+          roleChange === "user"
+            ? "Their staff access ends immediately, even if they are signed in right now."
+            : "They gain access to the admin console immediately."
+        }
+        confirmText="Change role"
+        danger={roleChange === "user"}
+        loading={changingRole}
+        onConfirm={handleRoleChange}
+        onClose={() => setRoleChange(null)}
+      >
+        <label className="ax-field">
+          <span className="ax-field-label">Reason (optional)</span>
+          <textarea className="ax-textarea" rows={2} maxLength={1000} value={roleReason} onChange={(e) => setRoleReason(e.target.value)} />
+        </label>
+      </ConfirmDialog>
 
       {/* Permanently Delete Post Confirm Dialog */}
       <ConfirmDialog

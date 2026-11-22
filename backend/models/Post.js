@@ -77,6 +77,45 @@ const postSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             default: null
+        },
+        // Why staff removed or unpublished the post (kept internal; not shown to the public)
+        moderationReason: {
+            type: String,
+            default: null,
+            maxlength: 1000
+        },
+        // Set when staff unpublish a post: the author cannot simply re-publish it until staff
+        // publish it again.
+        moderationHold: {
+            type: Boolean,
+            default: false
+        },
+        lastAdminEditAt: {
+            type: Date,
+            default: null
+        },
+        lastAdminEditBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null
+        },
+        // Featured posts. Visibility is always re-checked at read time (published + not deleted).
+        isFeatured: {
+            type: Boolean,
+            default: false
+        },
+        featuredAt: {
+            type: Date,
+            default: null
+        },
+        featuredBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null
+        },
+        featuredOrder: {
+            type: Number,
+            default: 0
         }
     },
     { timestamps: true }
@@ -137,6 +176,7 @@ postSchema.index({ category: 1 });
 postSchema.index({ status: 1, createdAt: -1 });
 postSchema.index({ author: 1, isDeleted: 1, deletedAt: -1 });
 postSchema.index({ title: "text", content: "text" });
+postSchema.index({ isFeatured: 1, featuredOrder: 1, featuredAt: -1 });
 
 const Post = mongoose.model("Post", postSchema);
 

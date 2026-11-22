@@ -4,6 +4,7 @@ import { Shield, Lock, Mail, ArrowRight } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import apiFetch from "../../api/api";
+import { isStaff, homeFor } from "./adminAccess";
 import "./AdminLogin.css";
 
 export default function AdminLogin() {
@@ -17,8 +18,8 @@ export default function AdminLogin() {
   const [error, setError] = useState("");
 
   // If already authenticated as admin, go straight to admin dashboard
-  if (user && user.role === "admin") {
-    return <Navigate to="/admin" replace />;
+  if (user && isStaff(user.role)) {
+    return <Navigate to={homeFor(user.role)} replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -47,17 +48,17 @@ export default function AdminLogin() {
       const userData = data.data?.user;
       const accessToken = data.data?.accessToken;
 
-      if (!userData || userData.role !== "admin") {
+      if (!userData || !isStaff(userData.role)) {
         // Normal user attempted admin login: log out immediately and reject
         await logout();
-        setError("Not authorized. Admin privileges required.");
+        setError("Not authorized. Staff access required.");
         toast.error("Not authorized");
         return;
       }
 
       login(accessToken, userData);
       toast.success(`Welcome back, ${userData.fullName || userData.username}`);
-      navigate("/admin", { replace: true });
+      navigate(homeFor(userData.role), { replace: true });
     } catch (err) {
       setError(err.message || "Login failed");
       toast.error(err.message || "Login failed");

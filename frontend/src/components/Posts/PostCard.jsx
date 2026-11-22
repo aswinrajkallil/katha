@@ -72,7 +72,7 @@ function PostCard({ post, onDelete, isPreview = false, showFollowingBadge = fals
   }, [post.isBookmarked, post.bookmarkedByMe]);
 
   const isAuthor = user && post.author && (user._id === post.author._id || user.id === post.author._id);
-  const isAdmin = user && user.role === "admin";
+  const isAdmin = user && (user.role === "admin" || user.role === "superadmin");
   const canModify = isAuthor || isAdmin;
 
   // Prefetch post and author on hover

@@ -22,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import ReportButton from "../ReportButton";
 import { useToast } from "../../context/ToastContext";
 import { useSocket, useUserRoom } from "../../context/SocketContext";
 import { apiQuery } from "../../api/api";
@@ -449,6 +450,9 @@ export default function Profile() {
                     </>
                   )}
                 </button>
+              )}
+              {!isOwnProfile && (
+                <ReportButton targetType="user" targetId={profile._id} className="profile-btn" label="Report" />
               )}
             </div>
           </div>

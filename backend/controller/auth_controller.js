@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { createHash, timingSafeEqual } from "crypto";
 import { generateRefreshToken, generateToken } from "../utils/jwt.js";
+import { isRegistrationOpen } from "../services/settingsService.js";
 
 const hashToken = token => createHash("sha256").update(token).digest("hex");
 const tokenMatches = (stored, token) => {
@@ -35,6 +36,7 @@ const checkUsername = async (req, res) => {
 
 const register = async (req, res) => {
     try {
+        if (!(await isRegistrationOpen())) return res.status(403).json({ success: false, message: "New registrations are currently closed" });
         const username = typeof req.body.username === "string" ? req.body.username.trim().toLowerCase() : "";
         const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
         const password = req.body.password;

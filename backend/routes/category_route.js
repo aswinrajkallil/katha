@@ -6,14 +6,18 @@ import {
     updateCategory,
     deleteCategory
 } from "../controller/category_controller.js";
-import authenticate, { requireAdmin } from "../middleware/authMiddleware.js";
+import { authenticate, requirePermission } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+// Writes use database-backed authorization (same as /api/admin), so a demoted admin loses
+// category access immediately instead of when their JWT expires. Moderators are not allowed.
+const manage = [authenticate, requirePermission("categories:manage")];
+
 router.get("/", getCategories);
 router.get("/:id", getCategory);
-router.post("/", authenticate, requireAdmin, createCategory);
-router.put("/:id", authenticate, requireAdmin, updateCategory);
-router.delete("/:id", authenticate, requireAdmin, deleteCategory);
+router.post("/", ...manage, createCategory);
+router.put("/:id", ...manage, updateCategory);
+router.delete("/:id", ...manage, deleteCategory);
 
 export default router;
