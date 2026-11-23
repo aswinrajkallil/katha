@@ -68,6 +68,13 @@ app.use("/api", discoveryRouter);
 
 app.get("/", (req, res) => res.json({ success: true, message: "Kathā API is running" }));
 
+// uptimerobot
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
+
+
+
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
         console.error("Multer error:", err);
