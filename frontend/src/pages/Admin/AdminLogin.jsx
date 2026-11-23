@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useNavigate, Navigate, Link } from "react-router-dom";
 import { Shield, Lock, Mail, ArrowRight } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -116,6 +116,12 @@ export default function AdminLogin() {
                 autoComplete="current-password"
               />
             </div>
+          </div>
+
+          <div className="admin-forgot-row">
+            <Link to="/admin/forgot-password" className="admin-link">
+              Forgot password?
+            </Link>
           </div>
 
           <button

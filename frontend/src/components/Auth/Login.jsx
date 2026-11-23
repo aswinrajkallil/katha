@@ -212,9 +212,14 @@ export default function Login() {
 
         {/* Password Field */}
         <div className="auth-field-group">
-          <label htmlFor="login-password" className="auth-label">
-            Password
-          </label>
+          <div className="auth-label-row">
+            <label htmlFor="login-password" className="auth-label">
+              Password
+            </label>
+            <Link to="/forgot-password" className="auth-forgot-link">
+              Forgot password?
+            </Link>
+          </div>
           <div className="auth-input-wrapper">
             <Lock size={18} className="auth-input-icon" aria-hidden="true" />
             <input
