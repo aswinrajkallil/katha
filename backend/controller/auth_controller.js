@@ -1,9 +1,11 @@
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { createHash, timingSafeEqual } from "crypto";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { generateRefreshToken, generateToken } from "../utils/jwt.js";
 import { isRegistrationOpen } from "../services/settingsService.js";
+import { sendPasswordResetEmail } from "../services/emailService.js";
+import { isStaffRole } from "../utils/permissions.js";
 
 const hashToken = token => createHash("sha256").update(token).digest("hex");
 const tokenMatches = (stored, token) => {
@@ -130,4 +132,90 @@ const getMe = async (req, res) => {
     }
 };
 
-export { register, login, refreshAccessToken, logout, getMe, checkUsername };
+// ---------------------------------------------------------------------------------------------
+// Password reset (same flow for normal users and staff)
+//
+//  1. POST /forgot-password   emails a single-use link. The response is identical whether or not
+//                             the address belongs to an account, so it cannot be used to find out
+//                             who is registered.
+//  2. POST /reset-password/:token  sets the new password, consumes the token and signs the account
+//                             out of every existing session.
+//
+// Only the SHA-256 hash of the token is stored. Staff accounts get a shorter lifetime and a link
+// into the admin console, so an admin resets and lands back on the admin login.
+// ---------------------------------------------------------------------------------------------
+const RESET_TTL_MINUTES = { user: 15, staff: 10 };
+const RESET_REQUESTED_MESSAGE = "If an account exists for that email, a password reset link has been sent.";
+const RESET_INVALID_MESSAGE = "This reset link is invalid or has expired. Please request a new one.";
+
+const frontendBaseUrl = () =>
+    (process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
+
+const forgotPassword = async (req, res) => {
+    try {
+        const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: "Enter a valid email address" });
+
+        // Deactivated (soft-deleted) accounts are filtered out by the User model, so they get no email.
+        const user = await User.findOne({ email }).select("email username fullName role");
+        let pending = null;
+        if (user) {
+            const staff = isStaffRole(user.role);
+            const expiresInMinutes = staff ? RESET_TTL_MINUTES.staff : RESET_TTL_MINUTES.user;
+            const token = randomBytes(32).toString("hex");
+            // Overwrites any earlier token, so only the most recent link works.
+            await User.updateOne(
+                { _id: user._id },
+                { $set: { passwordResetToken: hashToken(token), passwordResetExpires: new Date(Date.now() + expiresInMinutes * 60 * 1000) } },
+                { timestamps: false }
+            );
+            pending = {
+                to: user.email,
+                name: user.fullName || user.username,
+                link: `${frontendBaseUrl()}${staff ? "/admin" : ""}/reset-password/${token}`,
+                expiresInMinutes
+            };
+        }
+
+        // Reply before the (slow) SMTP round trip so response time does not reveal whether the account exists.
+        res.json({ success: true, message: RESET_REQUESTED_MESSAGE });
+
+        if (pending) {
+            try { await sendPasswordResetEmail(pending); }
+            catch (error) { console.error("forgotPassword: sending email failed:", error.message); }
+        }
+    } catch (error) {
+        console.error("forgotPassword:", error);
+        if (!res.headersSent) return res.status(500).json({ success: false, message: "Unable to process the request right now" });
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const token = typeof req.params.token === "string" ? req.params.token : "";
+        const password = req.body?.password;
+        if (typeof password !== "string" || password.length < 8 || password.length > 128) return res.status(400).json({ success: false, message: "Password must be between 8 and 128 characters" });
+        if (!/^[a-f0-9]{64}$/.test(token)) return res.status(400).json({ success: false, message: RESET_INVALID_MESSAGE });
+
+        // `isDeleted` is spelled out because updateOne is not covered by the model's soft-delete filter.
+        const claim = { passwordResetToken: hashToken(token), passwordResetExpires: { $gt: new Date() }, isDeleted: { $ne: true } };
+        if (!(await User.exists(claim))) return res.status(400).json({ success: false, message: RESET_INVALID_MESSAGE });
+
+        const hashed = await bcrypt.hash(password, 12);
+        // Matching on the token again inside the update makes the link strictly single-use, even if
+        // two requests race. Clearing refreshToken signs out every session started with the old password.
+        const { matchedCount } = await User.updateOne(
+            claim,
+            { $set: { password: hashed, refreshToken: null, passwordResetToken: null, passwordResetExpires: null } }
+        );
+        if (matchedCount !== 1) return res.status(400).json({ success: false, message: RESET_INVALID_MESSAGE });
+
+        res.clearCookie("refreshToken", cookieOpts);
+        return res.json({ success: true, message: "Your password has been updated. You can now log in." });
+    } catch (error) {
+        console.error("resetPassword:", error);
+        return res.status(500).json({ success: false, message: "Unable to reset password right now" });
+    }
+};
+
+export { register, login, refreshAccessToken, logout, getMe, checkUsername, forgotPassword, resetPassword };

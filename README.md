@@ -25,6 +25,7 @@
 
 - 📝 Share stories and interact with stories from other users
 - 🔐 JWT-based authentication
+- 🔑 Password reset by emailed single-use link (users and admins)
 - 🛡️ Role-based access control
 - 🖼️ Image uploads via Cloudinary
 - 🔌 REST API backend
@@ -79,7 +80,19 @@ JWT_SECRET=your_jwt_secret
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+
+# Password reset emails (any SMTP provider). FRONTEND_URL is used to build the reset links.
+FRONTEND_URL=http://localhost:5173
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_smtp_username
+SMTP_PASS=your_smtp_password
+EMAIL_FROM="Kathā <no-reply@example.com>"
 ```
+
+> In development, if the `SMTP_*` variables are not set, the password reset link is printed to the
+> backend console instead of being emailed. In production they are required.
 
 Start the server:
 

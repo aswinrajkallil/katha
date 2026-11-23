@@ -4,11 +4,13 @@ import { useAuth } from "../../context/AuthContext";
 import logoFull from "../../assets/katha-logo-full.svg";
 import "./AuthLayout.css";
 
-export default function AuthLayout() {
+// `allowAuthenticated` is for pages a signed-in visitor can legitimately open, such as the
+// password reset link from an email (which may be clicked in a browser that is still logged in).
+export default function AuthLayout({ allowAuthenticated = false }) {
   const { user, loading } = useAuth();
 
   // If already logged in, redirect to home
-  if (!loading && user) {
+  if (!loading && user && !allowAuthenticated) {
     return <Navigate to="/" replace />;
   }
 

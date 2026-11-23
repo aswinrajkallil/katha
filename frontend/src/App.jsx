@@ -11,6 +11,8 @@ import AuthLayout from "./components/Auth/AuthLayout";
 // React.lazy route splitting
 const Login = lazy(() => import("./components/Auth/Login"));
 const Register = lazy(() => import("./components/Auth/Register"));
+const ForgotPassword = lazy(() => import("./components/Auth/ForgotPassword"));
+const ResetPassword = lazy(() => import("./components/Auth/ResetPassword"));
 const PostDetails = lazy(() => import("./components/Posts/PostDetails"));
 const CreatePost = lazy(() => import("./components/Posts/CreatePost"));
 const EditPost = lazy(() => import("./components/Posts/EditPost"));
@@ -28,6 +30,8 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Admin lazy routes (fully code-split from public app bundle)
 const AdminLogin = lazy(() => import("./pages/Admin/AdminLogin"));
+const AdminForgotPassword = lazy(() => import("./pages/Admin/AdminForgotPassword"));
+const AdminResetPassword = lazy(() => import("./pages/Admin/AdminResetPassword"));
 const AdminLayout = lazy(() => import("./pages/Admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/Admin/AdminDashboard"));
 const AdminUsers = lazy(() => import("./pages/Admin/AdminUsers"));
@@ -80,10 +84,17 @@ function AppRoutes() {
                 <Route element={<AuthLayout />}>
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
+                </Route>
+                {/* The emailed reset link must work even if this browser is still logged in */}
+                <Route element={<AuthLayout allowAuthenticated />}>
+                    <Route path="/reset-password/:token" element={<ResetPassword />} />
                 </Route>
 
                 {/* Admin Routes: Isolated from public layout and lazy loaded */}
                 <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
+                <Route path="/admin/reset-password/:token" element={<AdminResetPassword />} />
                 <Route
                     path="/admin"
                     element={
